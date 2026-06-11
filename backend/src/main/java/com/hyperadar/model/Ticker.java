@@ -23,9 +23,6 @@ public class Ticker {
     @Column(unique = true, nullable = false, length = 10)
     private String symbol;
 
-    @Column(nullable = false)
-    private String name;
-
     @Column
     private String sector;
 
