@@ -9,20 +9,24 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
 ![Redis](https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white)
 
-HypeRadar is a full-stack stock market sentiment platform that polls Reddit and financial news RSS feeds every 5 minutes, combines social signal with real market data from Finnhub, and computes a live **0–100 hype score** per ticker. Results are pushed to connected clients via WebSocket, stored in a dual-database layer (PostgreSQL + Redis), and can trigger email alerts when user-defined thresholds are crossed.
+HypeRadar is a full-stack stock market sentiment platform that polls Reddit and financial news RSS feeds every 5 minutes, combines social signal with real market data from Alpha Vantage, and computes a live **0–100 hype score** per ticker. Results are pushed to connected clients via WebSocket, stored in a dual-database layer (PostgreSQL + Redis), and can trigger email alerts when user-defined thresholds are crossed.
+
+Tickers are discovered dynamically — HypeRadar scans headlines and posts for stock symbols, validates them against the full Alpha Vantage listing universe, and begins tracking them automatically. No pre-defined watchlist required.
 
 ---
 
 ## Data Pipeline
 
 ```
-Reddit API  ──┐
-Finnhub API ──┼──► @Scheduled Ingestion ──► Processing Engine ──► PostgreSQL ──► REST API ──► Next.js 15
-Reuters RSS ──┤         (5 min)                                ──► Redis Cache ──► WebSocket ──► Live Dashboard
-CNBC RSS    ──┘                                                └──► Alert Engine ──► Resend Email
+Reddit (public JSON) ──┐
+Alpha Vantage        ──┼──► @Scheduled Ingestion ──► Processing Engine ──► PostgreSQL ──► REST API ──► Next.js 15
+Reuters RSS          ──┤         (5 min)                                ──► Redis Cache ──► WebSocket ──► Live Dashboard
+CNBC RSS             ──┤                                                └──► Alert Engine ──► Resend Email
+MarketWatch RSS      ──┤
+Nasdaq RSS           ──┘
 ```
 
-Three Spring `@Scheduled` jobs run in sequence every 5 minutes — Reddit poller, Finnhub client, and RSS feed parser. Once ingestion completes, the processing engine runs sentiment analysis, computes hype scores, and classifies each ticker. The result writes to PostgreSQL for persistence and Redis for sub-millisecond serving of live data.
+Three Spring `@Scheduled` jobs run in sequence every 5 minutes — Reddit poller, Alpha Vantage client, and RSS feed parser. Once ingestion completes, the processing engine runs sentiment analysis, computes hype scores, and classifies each ticker. The result writes to PostgreSQL for persistence and Redis for sub-millisecond serving of live data.
 
 ---
 
@@ -40,8 +44,8 @@ HypeScore = (Reddit Velocity   × 0.40)
 | Signal | Formula | What it measures |
 |---|---|---|
 | **Reddit Velocity** | `(mentions_24h / rolling_30d_avg) × 50` capped at 100 | Spike in ticker mentions relative to baseline |
-| **News Sentiment** | `(polarity + 1) / 2 × 100` | Aggregated tone across Reuters and CNBC headlines |
-| **Volume Spike** | `(current_volume / avg_30d_volume) × 25` capped at 100 | Abnormal trading activity |
+| **News Sentiment** | `(polarity + 1) / 2 × 100` | Aggregated tone across Reuters, CNBC, MarketWatch, and Nasdaq headlines |
+| **Volume Spike** | `(current_volume / avg_30d_volume) × 25` capped at 100 | Abnormal trading activity via Alpha Vantage |
 | **52-Week Position** | `(price − 52wk_low) / (52wk_high − 52wk_low) × 100` | Where the stock sits in its annual range |
 
 Sub-scores are stored individually on every `HypeScore` row so the Deep Dive page can show a full signal breakdown — not just the final number.
@@ -69,17 +73,17 @@ After each pipeline cycle, the classifier compares the 24-hour hype score delta 
 
 PostgreSQL owns the truth — time-series hype scores, raw sentiment events, alert rules, historical event data. Redis owns the speed — the live trending sorted set (`ZREVRANGE` for top-N tickers in O(log N)), per-ticker hype score with a 10-minute TTL, and a pub/sub channel that decouples the alert threshold checker from the Resend email dispatcher. The API reads Redis first and falls back to PostgreSQL only on a cache miss.
 
-**Rate limit enforcement at the infrastructure layer**
+**Dynamic ticker discovery — no pre-defined watchlist**
 
-Both the Reddit API (60 req/min free tier) and Finnhub API (60 req/min free tier) impose hard request limits. Rather than handling this with try/catch and backoff, each ingestion job checks a Redis sliding window counter before making any external call — `INCR ratelimit:reddit; EXPIRE ratelimit:reddit 60`. If the counter exceeds 55 the job waits. No 429s, no data gaps.
+Rather than maintaining a fixed list of tracked stocks, HypeRadar discovers tickers organically. The RSS parser uses regex to extract uppercase symbol patterns from headlines and validates each one against the full Alpha Vantage listing universe loaded at startup. Reddit posts are scanned for the `$TICKER` cashtag format. Any valid listed symbol found gets added to the database automatically — the system tracks whatever the market is talking about, not whatever was manually configured.
 
 **Alert deduplication via database timestamp**
 
 Once an alert fires, `last_triggered_at` is stamped on the `Alert` row. The threshold checker (`@Scheduled` every 2 minutes) skips any alert where `last_triggered_at` is within the past 4 hours. A ticker sitting above threshold indefinitely sends exactly one email per 4-hour window — not one per cycle.
 
-**Market-hours awareness in the scheduler**
+**Unauthenticated Reddit polling**
 
-The Finnhub client only hits quote and candle endpoints during US market hours (09:30–16:00 ET, Monday–Friday). Outside those windows the job skips financial data fetching entirely. News and sentiment endpoints still run on their normal schedule since they're not time-bound.
+Reddit's Data API now requires moderation use case approval for new app credentials. HypeRadar uses Reddit's public JSON endpoints (`/r/{subreddit}/hot.json`) with a `User-Agent` header — no OAuth, no credentials, no approval process. Sufficient for post title scanning and mention counting at the required polling frequency.
 
 ---
 
@@ -95,7 +99,9 @@ The Finnhub client only hits quote and candle endpoints during US market hours (
 | **Real-time** | Spring WebSocket (STOMP) | Push hype score updates without client polling |
 | **Auth** | Spring Security + JWT | Stateless, standard |
 | **Email** | Resend | Simple API, reliable delivery |
-| **Data Sources** | Reddit API, Finnhub API, Reuters RSS, CNBC RSS | Free tier, no approval gates |
+| **Market Data** | Alpha Vantage | Free tier, price + volume + listing universe |
+| **Social Data** | Reddit public JSON endpoints | No credentials required |
+| **News Data** | Reuters, CNBC, MarketWatch, Nasdaq RSS | Free, no auth, four independent sources |
 | **Deployment** | Vercel (frontend) + Railway (backend) | Fast, zero-config |
 
 ---
@@ -107,7 +113,7 @@ HypeRadar/
 ├── backend/src/main/java/com/hyperadar/
 │   ├── controller/       # REST endpoints + WebSocket
 │   ├── service/
-│   │   ├── ingestion/    # Reddit, Finnhub, RSS pollers
+│   │   ├── ingestion/    # Reddit, Alpha Vantage, RSS pollers
 │   │   ├── processing/   # Sentiment analysis, hype scoring, B/B classification
 │   │   └── alert/        # Threshold checker, email dispatcher
 │   ├── scheduler/        # @Scheduled pipeline orchestration
@@ -149,13 +155,11 @@ npm install && npm run dev
 **Required environment variables:**
 
 ```
-DATABASE_URL          # PostgreSQL connection string
-REDIS_URL             # Upstash or local Redis URL
-JWT_SECRET            # 256-bit secret
-FINNHUB_API_KEY       # finnhub.io free tier
-REDDIT_CLIENT_ID      # Reddit app credentials
-REDDIT_CLIENT_SECRET
-RESEND_API_KEY        # resend.com free tier
+DATABASE_URL              # PostgreSQL connection string
+REDIS_URL                 # Upstash or local Redis URL
+JWT_SECRET                # 256-bit secret
+ALPHA_VANTAGE_API_KEY     # alphavantage.co free tier
+RESEND_API_KEY            # resend.com free tier
 ```
 
 ---
