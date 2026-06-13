@@ -13,8 +13,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 import org.springframework.beans.factory.annotation.Value;
+import java.util.regex.Matcher;
 
 import java.io.IOException;
 import java.net.URL;
@@ -55,9 +57,30 @@ public class RssFeedParserService {
         return headlinesMap;
     }
 
-    List<Ticker> getTickers() {
-        
+    List<String> FindTickerMentions() throws IllegalArgumentException, FeedException, IOException {
+        ArrayList<String> tickers = new ArrayList<>();
+        Map<String, List<String>> headlinesMap = getHeadlines();
+        for(List<String> headlines : headlinesMap.values()) {
+            for(String headline : headlines) {
+                // extract ticker mentions from headline and store in a list
+                // this is a placeholder implementation, you can use regex or a more sophisticated approach to extract tickers
+
+                Pattern pattern = Pattern.compile("\\b[A-Z]{1,5}\\b");
+                Matcher matcher = pattern.matcher(headline);
+                while (matcher.find()) {
+                    String symbol = matcher.group();
+                    tickers.add(symbol);
+                }
+                if(headline.contains("$")) {
+                    String ticker = headline.substring(headline.indexOf("$") + 1).split(" ")[0];
+                    tickers.add(ticker);
+                }
+            }
+        }
+        return tickers; // Placeholder return, replace with actual list of tickers
     }
+
+    
 
 
 
