@@ -63,7 +63,7 @@ After each pipeline cycle, the classifier compares the 24-hour hype score delta 
 | Flat / ↓ | ↑ Significant | **Hidden Momentum** | Price moving without social explanation — worth watching |
 | ↓ / Flat | ↓ / Flat | **Bearish Confirmation** | Both signals pointing down |
 
-"Significant" is defined as ±5 hype points and ±2% price movement — tunable without a schema change.
+"Significant" is defined as ±5 hype points and ±2% price movement, which is tunable without a schema change.
 
 ---
 
