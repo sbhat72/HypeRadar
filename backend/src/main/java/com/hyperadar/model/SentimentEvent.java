@@ -42,7 +42,9 @@ public class SentimentEvent {
     public enum Source {
         REDDIT,
         REUTERS,
-        CNBC
+        CNBC,
+        MARKETWATCH,
+        NASDAQ
     }
 
     public enum Polarity {
