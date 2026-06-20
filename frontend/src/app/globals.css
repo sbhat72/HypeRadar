@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-base: #080809;
+  --bg-surface: #111114;
+  --bg-elevated: #18181c;
+  --bg-subtle: #1e1e23;
+
+  --border-default: #2a2a30;
+  --border-subtle: #3a3a42;
+
+  --text-primary: #f0f0f4;
+  --text-secondary: #c0c0cc;
+  --text-muted: #808090;
+  --text-faint: #505060;
+
+  --hype-green: #62c073;
+  --hype-green-bg: #0f2e18;
+  --hype-red: #ff6166;
+  --hype-red-bg: #3c1618;
+  --hype-blue: #52a8ff;
+  --hype-blue-bg: #10233d;
+  --hype-orange: #ff990a;
+  --hype-orange-bg: #331b00;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-geist-sans), sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Chart grid background pattern */
+.chart-grid {
+  background-image:
+    linear-gradient(rgba(98, 192, 115, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(98, 192, 115, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Candlestick decoration */
+.candlestick-green {
+  background-color: var(--hype-green);
+  box-shadow: 0 0 8px var(--hype-green);
+}
+
+.candlestick-red {
+  background-color: var(--hype-red);
+  box-shadow: 0 0 8px var(--hype-red);
+}
+
+/* Scrolling ticker tape */
+.ticker-tape-track {
+  animation: ticker-scroll 28s linear infinite;
+  white-space: nowrap;
+}
+
+@keyframes ticker-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
