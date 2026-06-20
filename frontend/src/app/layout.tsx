@@ -15,16 +15,20 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: 'HypeRadar — Track the Hype. Trade the Signal.',
-  description: 'Real-time stock market social sentiment analysis. See what Reddit and financial news are buzzing about before the move happens.',
+  description:
+    'Real-time stock market social sentiment analysis. See what Reddit and financial news are buzzing about before the move happens.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ClerkProvider>
+    <ClerkProvider
+      signInUrl="/sign-in"
+      signUpUrl="/sign-up"
+      signInForceRedirectUrl="/hyped-stocks"
+      signUpForceRedirectUrl="/hyped-stocks"
+    >
       <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
-        <body className="antialiased">
-          {children}
-        </body>
+        <body className="antialiased">{children}</body>
       </html>
     </ClerkProvider>
   )
