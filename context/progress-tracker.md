@@ -52,7 +52,7 @@ This file tracks what has been built, what is in progress, known issues encounte
 ## In Progress
 
 - Processing engine — SentimentAnalyzerService, HypeScoreEngineService, BullishBearishClassifierService
-- **Frontend: Login page** — stock market themed design with Clerk auth integration (`/login`). Spec: `context/feature-specs/01-DesignSignUp.md`
+- **Frontend: Sign-in / Sign-up pages** — stock market terminal design with Clerk auth. Routes: `/sign-in`, `/sign-up`. Redirects to `/hyped-stocks` after auth. Spec: `context/feature-specs/01-DesignSignUp.md`
 
 ---
 
