@@ -47,12 +47,19 @@ This file tracks what has been built, what is in progress, known issues encounte
 ### Resources
 - `Loughran-McDonald_MasterDictionary_1993-2025.csv` — 86,000+ word financial sentiment lexicon loaded at startup by RssFeedParserService
 
+### Frontend Pages
+- **Sign-in / Sign-up** — Clerk auth with full stock market terminal dark theme. Routes: `/sign-in`, `/sign-up`. Redirects to `/hyped-stocks` after auth. Spec: `context/feature-specs/01-DesignSignUp.md`
+- **Live Hyped Stocks Dashboard** — `/hyped-stocks`. 18 mock tickers in a responsive grid. Header with pulsing live dot, "Live Hyped Stocks" in red/white/green. Time period filter tabs (1H/1D/1W/1M). TrendingTickerCard with price, change, mention count, 5-bar heat indicator, price flash on simulated updates (setInterval every 3s). Spec: `context/feature-specs/02-hyped-stocks.md`
+- **Ticker Deep Dive Placeholder** — `/hyped-stocks/[ticker]`. "Coming soon" placeholder. Clicking any card on the dashboard navigates here.
+
+### Frontend Components
+- `TrendingTickerCard` — card component with heat indicator (5 signal bars, blue→orange→red based on mention intensity), price flash animation (green/red CSS keyframe triggered by price change direction)
+
 ---
 
 ## In Progress
 
 - Processing engine — SentimentAnalyzerService, HypeScoreEngineService, BullishBearishClassifierService
-- **Frontend: Sign-in / Sign-up pages** — stock market terminal design with Clerk auth. Routes: `/sign-in`, `/sign-up`. Redirects to `/hyped-stocks` after auth. Spec: `context/feature-specs/01-DesignSignUp.md`
 
 ---
 
