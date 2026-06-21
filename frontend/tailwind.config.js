@@ -54,6 +54,18 @@ module.exports = {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0' },
         },
+        'flash-green': {
+          '0%': { backgroundColor: 'rgba(98, 192, 115, 0.4)' },
+          '100%': { backgroundColor: 'transparent' },
+        },
+        'flash-red': {
+          '0%': { backgroundColor: 'rgba(255, 97, 102, 0.4)' },
+          '100%': { backgroundColor: 'transparent' },
+        },
+        'live-pulse': {
+          '0%, 100%': { opacity: '1', transform: 'scale(1)' },
+          '50%': { opacity: '0.4', transform: 'scale(1.4)' },
+        },
       },
       animation: {
         'ticker-scroll': 'ticker-scroll 28s linear infinite',
@@ -62,6 +74,9 @@ module.exports = {
         'glow-red': 'glow-red 2.5s ease-in-out infinite',
         'fade-in-up': 'fade-in-up 0.6s ease-out forwards',
         'blink': 'blink 1s step-end infinite',
+        'flash-green': 'flash-green 600ms ease-out forwards',
+        'flash-red': 'flash-red 600ms ease-out forwards',
+        'live-pulse': 'live-pulse 1.5s ease-in-out infinite',
       },
     },
   },
