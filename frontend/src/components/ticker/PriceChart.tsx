@@ -80,7 +80,7 @@ export default function PriceChart({ data, loading, error }: Props) {
       cleanupRef.current?.()
       cleanupRef.current = null
     }
-  }, [data])
+  }, [data, loading, error])
 
   if (loading) {
     return (

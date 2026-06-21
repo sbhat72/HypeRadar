@@ -91,6 +91,10 @@ This file tracks what has been built, what is in progress, known issues encounte
 | 4 | Ticker model originally included name and sector fields | Resolved | Removed both fields — tickers are discovered dynamically from content so name/sector are not available at creation time |
 | 5 | `react` and `react-dom` in package.json specified as `^18.0.0`, below the `^18.2.0` peer requirement of Next.js 16 | Resolved | Updated both to `^18.2.0` in package.json. Installed version was already 18.3.1 so no reinstall needed |
 | 6 | Yahoo Finance proxy route had no fetch timeout — slow upstream could block indefinitely | Resolved | Added AbortController with 8 s timeout; clears on success; distinguishes AbortError in error response |
+| 7 | Yahoo Finance proxy accepted arbitrary interval/range values injected into upstream URL | Resolved | Added allowlist sets (ALLOWED_INTERVALS, ALLOWED_RANGES); returns 400 for unknown values |
+| 8 | Source evidence cards used `<a href="#">` with `preventDefault` — poor semantics and broken keyboard nav | Resolved | Replaced with `<button type="button">` with `w-full text-left` so layout is unchanged |
+| 9 | Rapid tab switches could commit stale chart data; error path left previous meta visible | Resolved | useEffect now creates an AbortController per run and cancels inflight fetch on cleanup; error path resets chartData and meta to initial values |
+| 10 | PriceChart useEffect only depended on `data`, leaving ResizeObserver alive against detached DOM during loading/error | Resolved | Added `loading` and `error` to the dependency array so cleanup fires immediately on state transitions |
 
 ---
 

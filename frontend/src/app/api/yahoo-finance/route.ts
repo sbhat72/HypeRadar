@@ -10,6 +10,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Missing required params: ticker, interval, range' }, { status: 400 })
   }
 
+  const ALLOWED_INTERVALS = new Set(['5m', '1h', '1d', '1wk'])
+  const ALLOWED_RANGES    = new Set(['1d', '5d', '1mo', '1y'])
+
+  if (!ALLOWED_INTERVALS.has(interval) || !ALLOWED_RANGES.has(range)) {
+    return NextResponse.json({ error: 'Invalid interval or range parameter' }, { status: 400 })
+  }
+
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=${interval}&range=${range}`
 
   const controller = new AbortController()

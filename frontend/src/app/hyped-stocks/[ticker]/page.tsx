@@ -77,38 +77,45 @@ export default function TickerDeepDivePage() {
   useEffect(() => {
     if (!ticker) return
     const r = TIME_RANGES.find(r => r.label === activeRange)!
-    loadChart(ticker, r.interval, r.range)
+    const controller = new AbortController()
+    loadChart(ticker, r.interval, r.range, controller.signal)
+    return () => controller.abort()
   }, [ticker, activeRange])
 
-  async function loadChart(symbol: string, interval: string, range: string) {
+  async function loadChart(symbol: string, interval: string, range: string, signal: AbortSignal) {
     setLoading(true)
     setChartError(null)
     try {
-      const res = await fetch(`/api/yahoo-finance?ticker=${symbol}&interval=${interval}&range=${range}`)
+      const res = await fetch(
+        `/api/yahoo-finance?ticker=${symbol}&interval=${interval}&range=${range}`,
+        { signal },
+      )
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const json = await res.json()
       const result = json?.chart?.result?.[0]
       if (!result) throw new Error('No data returned')
 
-      const timestamps: number[]           = result.timestamp ?? []
-      const closes: (number | null)[]      = result.indicators?.quote?.[0]?.close ?? []
+      const timestamps: number[]      = result.timestamp ?? []
+      const closes: (number | null)[] = result.indicators?.quote?.[0]?.close ?? []
 
       const points: ChartPoint[] = timestamps
         .map((ts, i) => ({ time: ts, value: closes[i] as number }))
         .filter(p => p.value !== null && p.value !== undefined && !isNaN(p.value))
 
       setChartData(points)
-
       setMeta({
-        longName:             result.meta?.longName            ?? symbol,
-        regularMarketPrice:   result.meta?.regularMarketPrice  ?? 0,
-        fiftyTwoWeekHigh:     result.meta?.fiftyTwoWeekHigh    ?? 0,
-        fiftyTwoWeekLow:      result.meta?.fiftyTwoWeekLow     ?? 0,
-        regularMarketVolume:  result.meta?.regularMarketVolume ?? 0,
+        longName:            result.meta?.longName            ?? symbol,
+        regularMarketPrice:  result.meta?.regularMarketPrice  ?? 0,
+        fiftyTwoWeekHigh:    result.meta?.fiftyTwoWeekHigh    ?? 0,
+        fiftyTwoWeekLow:     result.meta?.fiftyTwoWeekLow     ?? 0,
+        regularMarketVolume: result.meta?.regularMarketVolume ?? 0,
       })
-    } catch {
+      setLoading(false)
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return
+      setChartData([])
+      setMeta(null)
       setChartError('Could not load chart data')
-    } finally {
       setLoading(false)
     }
   }
@@ -279,16 +286,13 @@ export default function TickerDeepDivePage() {
           </div>
           <div className="flex flex-col gap-3">
             {MOCK_SOURCES.map((src, i) => (
-              <a
+              <button
                 key={i}
-                href="#"
-                className="block rounded-xl p-4 transition-colors"
+                type="button"
+                className="block w-full text-left rounded-xl p-4 transition-colors"
                 style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)' }}
                 onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--border-subtle)')}
                 onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border-default)')}
-                onClick={e => e.preventDefault()}
-                target="_blank"
-                rel="noopener noreferrer"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -321,7 +325,7 @@ export default function TickerDeepDivePage() {
                     {src.polarity}
                   </span>
                 </div>
-              </a>
+              </button>
             ))}
           </div>
         </section>
