@@ -50,10 +50,14 @@ This file tracks what has been built, what is in progress, known issues encounte
 ### Frontend Pages
 - **Sign-in / Sign-up** — Clerk auth with full stock market terminal dark theme. Routes: `/sign-in`, `/sign-up`. Redirects to `/hyped-stocks` after auth. Spec: `context/feature-specs/01-DesignSignUp.md`
 - **Live Hyped Stocks Dashboard** — `/hyped-stocks`. 18 mock tickers in a responsive grid. Header with pulsing live dot, "Live Hyped Stocks" in red/white/green. Time period filter tabs (1H/1D/1W/1M). TrendingTickerCard with price, change, mention count, 5-bar heat indicator, price flash on simulated updates (setInterval every 3s). Spec: `context/feature-specs/02-hyped-stocks.md`
-- **Ticker Deep Dive Placeholder** — `/hyped-stocks/[ticker]`. "Coming soon" placeholder. Clicking any card on the dashboard navigates here.
+- **Ticker Deep Dive** — `/hyped-stocks/[ticker]`. Full deep dive page. Real price chart via `lightweight-charts` v5 (TradingView) with area series. Time range tabs 1D/1W/1M/1Y each fetching from Yahoo Finance v8 chart API via a Next.js proxy route (`/api/yahoo-finance`). Financial summary row (current price, 52-week high/low, volume). Hype score breakdown with 4 sub-signal progress bars (mock data, colour-coded). Pure Hype verdict badge. 6 mock source cards with polarity badges. Watchlist toggle button. Spec: `context/feature-specs/03-ticker-deep-dive.md`
 
 ### Frontend Components
 - `TrendingTickerCard` — card component with heat indicator (5 signal bars, blue→orange→red based on mention intensity), price flash animation (green/red CSS keyframe triggered by price change direction)
+- `PriceChart` — client component wrapping lightweight-charts v5 AreaSeries. Accepts `ChartPoint[]` (Unix-second timestamps + close values), handles resize via ResizeObserver, dynamic import to avoid SSR issues
+
+### API Routes
+- `/api/yahoo-finance` — Next.js App Router GET route that proxies Yahoo Finance v8 chart API. Accepts `ticker`, `interval`, `range` query params. Returns raw Yahoo Finance JSON. Avoids browser CORS restrictions.
 
 ---
 
@@ -85,6 +89,12 @@ This file tracks what has been built, what is in progress, known issues encounte
 | 2 | Finnhub free tier does not include candle, company-news, or stock metric endpoints | Resolved | Switched to Alpha Vantage GLOBAL_QUOTE which provides price, volume, and change data on the free tier |
 | 3 | Custom auth layer (UserService, JwtUtil, SecurityConfig) built before Clerk decision | Pending | Will be removed or archived when Clerk is integrated. Alert and WatchlistItem will use clerkUserId String instead of User FK |
 | 4 | Ticker model originally included name and sector fields | Resolved | Removed both fields — tickers are discovered dynamically from content so name/sector are not available at creation time |
+| 5 | `react` and `react-dom` in package.json specified as `^18.0.0`, below the `^18.2.0` peer requirement of Next.js 16 | Resolved | Updated both to `^18.2.0` in package.json. Installed version was already 18.3.1 so no reinstall needed |
+| 6 | Yahoo Finance proxy route had no fetch timeout — slow upstream could block indefinitely | Resolved | Added AbortController with 8 s timeout; clears on success; distinguishes AbortError in error response |
+| 7 | Yahoo Finance proxy accepted arbitrary interval/range values injected into upstream URL | Resolved | Added allowlist sets (ALLOWED_INTERVALS, ALLOWED_RANGES); returns 400 for unknown values |
+| 8 | Source evidence cards used `<a href="#">` with `preventDefault` — poor semantics and broken keyboard nav | Resolved | Replaced with `<button type="button">` with `w-full text-left` so layout is unchanged |
+| 9 | Rapid tab switches could commit stale chart data; error path left previous meta visible | Resolved | useEffect now creates an AbortController per run and cancels inflight fetch on cleanup; error path resets chartData and meta to initial values |
+| 10 | PriceChart useEffect only depended on `data`, leaving ResizeObserver alive against detached DOM during loading/error | Resolved | Added `loading` and `error` to the dependency array so cleanup fires immediately on state transitions |
 
 ---
 
