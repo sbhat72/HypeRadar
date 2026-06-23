@@ -86,7 +86,7 @@ export default function TickerDeepDivePage() {
     if (!ticker) return
     const r = TIME_RANGES.find(r => r.label === activeRange)!
     const controller = new AbortController()
-    loadChart(ticker, r.interval, r.range, controller.signal)
+    loadChart(ticker, r.interval, r.range, controller.signal).catch(() => {})
     return () => controller.abort()
   }, [ticker, activeRange])
 
@@ -131,7 +131,7 @@ export default function TickerDeepDivePage() {
       })
       setLoading(false)
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') return
+      if (signal.aborted) return
       setChartData([])
       setMeta(null)
       setChartError('Could not load chart data')
