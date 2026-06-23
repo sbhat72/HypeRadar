@@ -7,6 +7,7 @@ import { UserButton } from '@clerk/nextjs'
 const NAV_LINKS = [
   { label: 'Dashboard', href: '/hyped-stocks' },
   { label: 'Watchlist', href: '/watchlist' },
+  { label: 'Alerts', href: '/alerts' },
 ]
 
 export default function Navbar() {
