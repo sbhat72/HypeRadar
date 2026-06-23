@@ -34,6 +34,9 @@ This file tracks what has been built, what is in progress, known issues encounte
 - `RedditPollerService` — unauthenticated public JSON endpoints (/r/{subreddit}/hot.json), User-Agent header, fetchSubredditPosts, poll. Ticker mention extraction and SentimentEvent writing implemented.
 - `MarketDataService` — Alpha Vantage GLOBAL_QUOTE endpoint, fetchQuote returns AlphaVantageQuoteDto
 - `RssFeedParserService` — fully implemented. loadValidTickers (@PostConstruct, Alpha Vantage LISTING_STATUS), loadSentimentDictionary (@PostConstruct, Loughran-McDonald CSV), getHeadlines (Rome library, 4 RSS feeds), findTickerMentions (regex + cashtag detection, validated against listing universe), scoreSentiment (Loughran-McDonald keyword scoring), parse (orchestrates full pipeline, creates Tickers dynamically, saves SentimentEvents)
+- `SentimentAnalyzerService` — computeRedditScores() and computeNewsScores(). Reads SentimentEvent rows from the past 24h per ticker, applies polarity formula ((positive-negative)/total mapped to 0–100). Returns 50.0 neutral default for tickers with no events.
+- `HypeScoreEngineService` — computeAll(). Fetches sentiment scores, Alpha Vantage quotes for all tickers, normalises volume across the cycle, computes weighted hype score (reddit 40%, news 30%, volume 20%, price 10%), saves HypeScore to PostgreSQL, updates Redis hype cache and trending sorted set.
+- `BullishBearishClassifierService` — classifyAll(). Reads the two most recent HypeScore rows per ticker, computes hype delta and price delta (Alpha Vantage changePercent), stamps HYPE_CONFIRMED / PURE_HYPE / HIDDEN_MOMENTUM / BEARISH_CONFIRMATION verdict on the latest row. Skips tickers with fewer than two rows.
 
 ### DTOs
 - `AlphaVantageQuoteDto` — @JsonProperty mapped fields from Alpha Vantage GLOBAL_QUOTE response
@@ -73,14 +76,13 @@ This file tracks what has been built, what is in progress, known issues encounte
 
 ## In Progress
 
-- Processing engine — SentimentAnalyzerService, HypeScoreEngineService, BullishBearishClassifierService
+- None
 
 ---
 
 ## Up Next
 
-1. Complete processing engine (SentimentAnalyzerService → HypeScoreEngineService → BullishBearishClassifierService)
-2. Schedulers — DataPipelineScheduler, AlertScheduler
+1. Schedulers — DataPipelineScheduler, AlertScheduler
 3. Clerk auth integration — replace custom auth layer, update SecurityConfig to verify Clerk JWTs, store clerkUserId on Alert and WatchlistItem
 4. Alert services — AlertThresholdService, EmailDispatcherService (Resend)
 5. WatchlistItem model and repository (new — not in original scaffold)
