@@ -82,12 +82,13 @@ export default function AlertsPage() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (!user?.id) return
     if (!TICKER_RE.test(ticker)) {
       setTickerError('Ticker must be 1–5 uppercase letters (e.g. TSLA)')
       return
     }
     setTickerError('')
-    const email = user?.primaryEmailAddress?.emailAddress ?? ''
+    const email = user.primaryEmailAddress?.emailAddress ?? ''
     const newAlert: Alert = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       ticker,
@@ -95,7 +96,7 @@ export default function AlertsPage() {
       email,
       createdAt: new Date().toISOString(),
     }
-    addAlert(user!.id, newAlert)
+    addAlert(user.id, newAlert)
     setAlerts(prev => [...prev, newAlert])
     setTicker('')
     setThreshold(70)
