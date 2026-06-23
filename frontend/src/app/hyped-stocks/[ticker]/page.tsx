@@ -3,7 +3,9 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { useUser } from '@clerk/nextjs'
 import PriceChart, { type ChartPoint } from '@/components/ticker/PriceChart'
+import { isWatchlisted, addToWatchlist, removeFromWatchlist } from '@/lib/watchlist'
 
 const TIME_RANGES = [
   { label: '1D', interval: '5m',  range: '1d'  },
@@ -66,6 +68,7 @@ function fmtVolume(n: number): string {
 export default function TickerDeepDivePage() {
   const params = useParams()
   const ticker = (params.ticker as string)?.toUpperCase() ?? ''
+  const { user, isLoaded } = useUser()
 
   const [activeRange, setActiveRange] = useState<RangeLabel>('1D')
   const [chartData,   setChartData]   = useState<ChartPoint[]>([])
@@ -75,12 +78,28 @@ export default function TickerDeepDivePage() {
   const [watchlisted, setWatchlisted] = useState(false)
 
   useEffect(() => {
+    if (!isLoaded || !user?.id || !ticker) return
+    setWatchlisted(isWatchlisted(user.id, ticker))
+  }, [isLoaded, user?.id, ticker])
+
+  useEffect(() => {
     if (!ticker) return
     const r = TIME_RANGES.find(r => r.label === activeRange)!
     const controller = new AbortController()
     loadChart(ticker, r.interval, r.range, controller.signal)
     return () => controller.abort()
   }, [ticker, activeRange])
+
+  function handleWatchlistToggle() {
+    if (!user?.id) return
+    if (watchlisted) {
+      removeFromWatchlist(user.id, ticker)
+      setWatchlisted(false)
+    } else {
+      addToWatchlist(user.id, ticker)
+      setWatchlisted(true)
+    }
+  }
 
   async function loadChart(symbol: string, interval: string, range: string, signal: AbortSignal) {
     setLoading(true)
@@ -145,7 +164,7 @@ export default function TickerDeepDivePage() {
             </p>
           </div>
           <button
-            onClick={() => setWatchlisted(w => !w)}
+            onClick={handleWatchlistToggle}
             className="flex-shrink-0 px-4 py-2 rounded-lg font-mono text-sm font-bold border transition-all duration-200"
             style={watchlisted
               ? { backgroundColor: 'var(--hype-green-bg)', borderColor: 'var(--hype-green)', color: 'var(--hype-green)' }
