@@ -102,6 +102,7 @@ This file tracks what has been built, what is in progress, known issues encounte
 | 9 | Rapid tab switches could commit stale chart data; error path left previous meta visible | Resolved | useEffect now creates an AbortController per run and cancels inflight fetch on cleanup; error path resets chartData and meta to initial values |
 | 10 | PriceChart useEffect only depended on `data`, leaving ResizeObserver alive against detached DOM during loading/error | Resolved | Added `loading` and `error` to the dependency array so cleanup fires immediately on state transitions |
 | 11 | `AbortError: signal is aborted without reason` surfaced as a Runtime error in the dev overlay on the deep dive page | Resolved | Two-part fix: (1) replaced `err instanceof Error && err.name === 'AbortError'` with `signal.aborted` — the definitive check that works regardless of whether the runtime throws a `DOMException` or `Error`; (2) added `.catch(() => {})` on the `loadChart(...)` call in the useEffect so any rejection that escapes the internal catch block never becomes an unhandled Promise rejection |
+| 12 | React hydration mismatch on `<body>` — Grammarly browser extension injects `data-new-gr-c-s-check-loaded` and `data-gr-ext-installed` attributes into the DOM before React hydrates, causing a server/client attribute diff | Resolved | Added `suppressHydrationWarning` to `<body>` in `src/app/layout.tsx`. This tells React to skip attribute-level comparison on the body element without suppressing child hydration errors |
 
 ---
 

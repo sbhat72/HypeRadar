@@ -28,7 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       signUpForceRedirectUrl="/hyped-stocks"
     >
       <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
-        <body className="antialiased">{children}</body>
+        <body className="antialiased" suppressHydrationWarning>{children}</body>
       </html>
     </ClerkProvider>
   )
