@@ -8,6 +8,7 @@ const NAV_LINKS = [
   { label: 'Dashboard', href: '/hyped-stocks' },
   { label: 'Watchlist', href: '/watchlist' },
   { label: 'Alerts', href: '/alerts' },
+  { label: 'History', href: '/history' },
 ]
 
 export default function Navbar() {
