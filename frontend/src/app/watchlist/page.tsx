@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useUser } from '@clerk/nextjs'
-import { getWatchlist, removeFromWatchlist } from '@/lib/watchlist'
+import { useAuth } from '@clerk/nextjs'
 import { MOCK_TICKERS } from '@/lib/mock-tickers'
+import { useApiClient } from '@/lib/useApiClient'
 
 const TIME_TABS = ['1H', '1D', '1W', '1M', '1Y'] as const
 type TimeTab = typeof TIME_TABS[number]
@@ -15,6 +15,30 @@ const TIME_MULTIPLIERS: Record<TimeTab, number> = {
   '1W': 3.4,
   '1M': 9.2,
   '1Y': 47,
+}
+
+interface WatchlistItem {
+  id: number
+  tickerSymbol: string
+  addedAt: string
+}
+
+interface TrendingTickerDto {
+  symbol: string
+  score: number
+  priceChange: number
+  changePercent: number
+  mentionCount: number
+}
+
+interface CardData {
+  symbol: string
+  price: number
+  change: number
+  changePercent: number
+  mentions: number
+  hypeScore: number
+  hasRealData: boolean
 }
 
 interface NewsItem {
@@ -82,40 +106,86 @@ function getHeatColor(intensity: number): string {
 }
 
 export default function WatchlistPage() {
-  const { user, isLoaded } = useUser()
-  const [watchlistSymbols, setWatchlistSymbols] = useState<string[]>([])
+  const { isLoaded } = useAuth()
+  const { apiCall } = useApiClient()
+
+  const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>([])
+  const [cardData, setCardData] = useState<CardData[]>([])
+  const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<TimeTab>('1D')
 
   useEffect(() => {
-    if (!isLoaded || !user?.id) return
-    setWatchlistSymbols(getWatchlist(user.id))
-  }, [isLoaded, user?.id])
+    if (!isLoaded) return
+    loadWatchlist()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded])
 
-  const watchlistData = MOCK_TICKERS.filter(t => watchlistSymbols.includes(t.symbol))
-  const maxMentions = Math.max(...watchlistData.map(t => t.mentions), 1)
-  const multiplier = TIME_MULTIPLIERS[activeTab]
-
-  const combinedChange = watchlistData.reduce((sum, t) => sum + t.change * multiplier, 0)
-  const combinedChangePct =
-    watchlistData.length > 0
-      ? watchlistData.reduce((sum, t) => sum + t.changePercent * multiplier, 0) / watchlistData.length
-      : 0
-  const totalMentions = watchlistData.reduce((sum, t) => sum + t.mentions, 0)
-  const avgHypeScore =
-    watchlistData.length > 0
-      ? Math.round(watchlistData.reduce((sum, t) => sum + t.hypeScore, 0) / watchlistData.length)
-      : 0
-
-  const filteredNews = MOCK_NEWS.filter(n => watchlistSymbols.includes(n.ticker))
-  const isPositiveCombined = combinedChange >= 0
-
-  function handleRemove(symbol: string) {
-    if (!user?.id) return
-    removeFromWatchlist(user.id, symbol)
-    setWatchlistSymbols(prev => prev.filter(s => s !== symbol))
+  async function loadWatchlist() {
+    setLoading(true)
+    try {
+      const [items, trending]: [WatchlistItem[], TrendingTickerDto[]] = await Promise.all([
+        apiCall('/api/watchlist'),
+        apiCall('/api/tickers/trending?limit=100').catch(() => []),
+      ])
+      setWatchlistItems(items)
+      setCardData(buildCardData(items, trending))
+    } catch {
+      setWatchlistItems([])
+      setCardData([])
+    } finally {
+      setLoading(false)
+    }
   }
 
-  if (!isLoaded) {
+  function buildCardData(items: WatchlistItem[], trending: TrendingTickerDto[]): CardData[] {
+    return items.map(item => {
+      const t = trending.find(t => t.symbol === item.tickerSymbol)
+      if (t) {
+        return {
+          symbol: item.tickerSymbol,
+          price: Math.abs(t.priceChange) || 0.01,
+          change: t.priceChange,
+          changePercent: t.changePercent,
+          mentions: t.mentionCount,
+          hypeScore: t.score,
+          hasRealData: true,
+        }
+      }
+      const mock = MOCK_TICKERS.find(m => m.symbol === item.tickerSymbol)
+      if (mock) {
+        return { ...mock, hasRealData: false }
+      }
+      return { symbol: item.tickerSymbol, price: 0, change: 0, changePercent: 0, mentions: 0, hypeScore: 0, hasRealData: false }
+    })
+  }
+
+  async function handleRemove(symbol: string) {
+    try {
+      await apiCall(`/api/watchlist/${symbol}`, { method: 'DELETE' })
+      setWatchlistItems(prev => prev.filter(item => item.tickerSymbol !== symbol))
+      setCardData(prev => prev.filter(d => d.symbol !== symbol))
+    } catch {
+      // silently fail
+    }
+  }
+
+  const summaryData = cardData.filter(d => d.hasRealData)
+  const maxMentions = Math.max(...cardData.map(d => d.mentions), 1)
+  const multiplier = TIME_MULTIPLIERS[activeTab]
+
+  const combinedChange = summaryData.reduce((sum, d) => sum + d.change * multiplier, 0)
+  const combinedChangePct = summaryData.length > 0
+    ? summaryData.reduce((sum, d) => sum + d.changePercent * multiplier, 0) / summaryData.length
+    : 0
+  const totalMentions = summaryData.reduce((sum, d) => sum + d.mentions, 0)
+  const avgHypeScore = summaryData.length > 0
+    ? Math.round(summaryData.reduce((sum, d) => sum + d.hypeScore, 0) / summaryData.length)
+    : 0
+
+  const filteredNews = MOCK_NEWS.filter(n => watchlistItems.some(item => item.tickerSymbol === n.ticker))
+  const isPositiveCombined = combinedChange >= 0
+
+  if (!isLoaded || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--bg-base)' }}>
         <span className="font-mono text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</span>
@@ -123,7 +193,7 @@ export default function WatchlistPage() {
     )
   }
 
-  if (watchlistSymbols.length === 0) {
+  if (watchlistItems.length === 0) {
     return (
       <div className="min-h-screen" style={{ backgroundColor: 'var(--bg-base)' }}>
         <div className="max-w-7xl mx-auto px-6 py-24 text-center">
@@ -177,7 +247,6 @@ export default function WatchlistPage() {
               >
                 {isPositiveCombined ? '+' : ''}{combinedChangePct.toFixed(2)}%
               </div>
-              {/* Time period toggle */}
               <div className="flex gap-1">
                 {TIME_TABS.map(tab => (
                   <button
@@ -240,75 +309,74 @@ export default function WatchlistPage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-12">
-          {watchlistData.map(ticker => {
-            const isPos = ticker.change >= 0
-            const intensity = ticker.mentions / maxMentions
+          {cardData.map(d => {
+            const isPos = d.change >= 0
+            const intensity = d.mentions / maxMentions
             const activeBars = Math.max(1, Math.ceil(intensity * 5))
             const heatColor = getHeatColor(intensity)
             return (
-              <div key={ticker.symbol} className="relative">
-                <Link href={`/hyped-stocks/${ticker.symbol}`} className="block">
+              <div key={d.symbol} className="relative">
+                <Link href={`/hyped-stocks/${d.symbol}`} className="block">
                   <div
                     className="rounded-2xl p-4 transition-all duration-150 cursor-pointer"
                     style={{ backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-default)' }}
                     onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--border-subtle)')}
                     onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border-default)')}
                   >
-                    {/* Symbol — with right padding so the × button doesn't overlap */}
                     <div className="mb-3 pr-6">
                       <span
                         className="text-xl font-black font-mono tracking-widest"
                         style={{ color: 'var(--text-primary)' }}
                       >
-                        {ticker.symbol}
+                        {d.symbol}
                       </span>
                     </div>
 
-                    {/* Price */}
-                    <div className="text-2xl font-bold font-mono mb-1" style={{ color: 'var(--text-primary)' }}>
-                      ${ticker.price.toFixed(2)}
-                    </div>
-
-                    {/* Change */}
-                    <div
-                      className="text-sm font-mono font-semibold mb-3"
-                      style={{ color: isPos ? 'var(--hype-green)' : 'var(--hype-red)' }}
-                    >
-                      {isPos ? '+' : ''}{ticker.change.toFixed(2)}{' '}
-                      <span className="text-xs opacity-80">
-                        ({isPos ? '+' : ''}{ticker.changePercent.toFixed(2)}%)
-                      </span>
-                    </div>
-
-                    {/* Mention count */}
-                    <div className="text-xs font-mono mb-3">
-                      <span style={{ color: 'var(--text-secondary)' }}>
-                        {ticker.mentions.toLocaleString()}
-                      </span>
-                      <span style={{ color: 'var(--text-faint)' }}> mentions</span>
-                    </div>
-
-                    {/* Heat indicator — same as dashboard */}
-                    <div className="flex gap-1 items-end" style={{ height: '20px' }}>
-                      {BAR_HEIGHTS.map((height, i) => (
+                    {d.hasRealData || d.price > 0 ? (
+                      <>
+                        <div className="text-2xl font-bold font-mono mb-1" style={{ color: 'var(--text-primary)' }}>
+                          ${d.price.toFixed(2)}
+                        </div>
                         <div
-                          key={i}
-                          className="flex-1 rounded-sm"
-                          style={{
-                            height,
-                            backgroundColor: i < activeBars ? heatColor : 'var(--bg-subtle)',
-                            boxShadow: i < activeBars ? `0 0 5px ${heatColor}55` : 'none',
-                          }}
-                        />
-                      ))}
-                    </div>
+                          className="text-sm font-mono font-semibold mb-3"
+                          style={{ color: isPos ? 'var(--hype-green)' : 'var(--hype-red)' }}
+                        >
+                          {isPos ? '+' : ''}{d.change.toFixed(2)}{' '}
+                          <span className="text-xs opacity-80">
+                            ({isPos ? '+' : ''}{d.changePercent.toFixed(2)}%)
+                          </span>
+                        </div>
+                        <div className="text-xs font-mono mb-3">
+                          <span style={{ color: 'var(--text-secondary)' }}>
+                            {d.mentions.toLocaleString()}
+                          </span>
+                          <span style={{ color: 'var(--text-faint)' }}> mentions</span>
+                        </div>
+                        <div className="flex gap-1 items-end" style={{ height: '20px' }}>
+                          {BAR_HEIGHTS.map((height, i) => (
+                            <div
+                              key={i}
+                              className="flex-1 rounded-sm"
+                              style={{
+                                height,
+                                backgroundColor: i < activeBars ? heatColor : 'var(--bg-subtle)',
+                                boxShadow: i < activeBars ? `0 0 5px ${heatColor}55` : 'none',
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-xs font-mono py-3" style={{ color: 'var(--text-muted)' }}>
+                        No hype data yet
+                      </div>
+                    )}
                   </div>
                 </Link>
 
-                {/* Remove button — outside Link so it doesn't trigger navigation */}
                 <button
                   type="button"
-                  onClick={() => handleRemove(ticker.symbol)}
+                  onClick={() => handleRemove(d.symbol)}
                   className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center text-base font-mono rounded transition-colors duration-150"
                   style={{ color: 'var(--text-muted)' }}
                   onMouseEnter={e => (e.currentTarget.style.color = '#FF6166')}
@@ -339,15 +407,11 @@ export default function WatchlistPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="block rounded-xl p-4 transition-all duration-150 no-underline"
-                  style={{
-                    backgroundColor: 'var(--bg-subtle)',
-                    border: '1px solid var(--border-subtle)',
-                  }}
+                  style={{ backgroundColor: 'var(--bg-subtle)', border: '1px solid var(--border-subtle)' }}
                   onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--border-default)')}
                   onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border-subtle)')}
                 >
                   <div className="flex items-center gap-3 flex-wrap">
-                    {/* Source badge */}
                     <span
                       className="flex-shrink-0 text-xs font-mono font-bold px-2 py-0.5 rounded"
                       style={{
@@ -357,17 +421,13 @@ export default function WatchlistPage() {
                     >
                       {news.source}
                     </span>
-
-                    {/* Headline */}
                     <span
                       className="flex-1 min-w-0 text-sm font-mono"
                       style={{ color: 'var(--text-secondary)' }}
                     >
                       {news.headline}
                     </span>
-
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      {/* Ticker tag */}
                       <span
                         className="text-xs font-mono font-bold px-2 py-0.5 rounded"
                         style={{
@@ -378,8 +438,6 @@ export default function WatchlistPage() {
                       >
                         {news.ticker}
                       </span>
-
-                      {/* Polarity badge */}
                       <span
                         className="text-xs font-mono font-bold px-2 py-0.5 rounded"
                         style={

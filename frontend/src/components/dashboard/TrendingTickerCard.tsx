@@ -4,7 +4,7 @@ import Link from 'next/link'
 
 export interface TickerData {
   symbol: string
-  price: number
+  price?: number
   change: number
   changePercent: number
   mentions: number
@@ -62,7 +62,7 @@ export default function TrendingTickerCard({ ticker, flash, maxMentions }: Props
             />
           )}
           <span className="relative text-2xl font-bold font-mono text-primary">
-            ${ticker.price.toFixed(2)}
+            {ticker.price !== undefined ? `$${ticker.price.toFixed(2)}` : '—'}
           </span>
         </div>
 
