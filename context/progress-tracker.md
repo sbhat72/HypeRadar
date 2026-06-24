@@ -10,26 +10,22 @@ This file tracks what has been built, what is in progress, known issues encounte
 - `Ticker` — symbol, createdAt. Name and sector removed — tickers are discovered dynamically from content, not pre-seeded.
 - `HypeScore` — ticker FK, score, redditScore, newsScore, volumeScore, fiftyTwoWeekScore, verdict enum (HYPE_CONFIRMED, PURE_HYPE, HIDDEN_MOMENTUM, BEARISH_CONFIRMATION), createdAt
 - `SentimentEvent` — ticker FK, source enum (REDDIT, REUTERS, CNBC, MARKETWATCH, NASDAQ), content, polarity enum (POSITIVE, NEGATIVE, NEUTRAL), createdAt
-- `Alert` — user FK via clerkUserId String, ticker FK, threshold Double, notificationType enum (EMAIL), isActive, lastTriggeredAt, createdAt
+- `Alert` — clerkUserId String, ticker FK, threshold Double, notificationType enum (EMAIL), isActive, lastTriggeredAt, createdAt
 - `HistoricalEvent` — ticker FK, eventName, description, startDate, endDate, createdAt
-- `User` — email, passwordHash, fullName, createdAt, updatedAt. Implements Spring Security UserDetails. **To be removed or archived — auth is moving to Clerk**
 
 ### Repositories
 - `TickerRepository` — findBySymbol
 - `HypeScoreRepository` — findByTickerOrderByCreatedAtDesc, findTopByTickerOrderByCreatedAtDesc
 - `SentimentEventRepository` — findByTickerAndCreatedAtAfter
-- `AlertRepository` — findByUserAndIsActiveTrue, findByIsActiveTrue
+- `AlertRepository` — findByClerkUserIdAndIsActiveTrue, findByClerkUserIdAndTickerAndIsActiveTrue, findByIsActiveTrue
 - `HistoricalEventRepository` — base JpaRepository only
-- `UserRepository` — findByEmail. **To be removed or archived — auth is moving to Clerk**
 
 ### Config
-- `JwtUtil` — token generation, username extraction, token validation using jjwt 0.11.5. **To be removed — auth is moving to Clerk**
-- `JwtAuthenticationFilter` — OncePerRequestFilter that intercepts requests and sets SecurityContext. **To be replaced with Clerk JWT verification**
-- `SecurityConfig` — Spring Security 6, CSRF disabled, STATELESS sessions, CORS for localhost:3000, public routes /api/auth/** and /ws/**. **To be updated for Clerk**
+- `ClerkAuthenticationFilter` — OncePerRequestFilter that reads the `Authorization: Bearer` header, decodes the Clerk JWT via `JwtDecoder`, validates the `sub` claim is non-null/non-blank, and sets it as the authenticated principal in `SecurityContextHolder`. Passes through on missing/invalid token or missing sub.
+- `SecurityConfig` — Spring Security 6, CSRF disabled, STATELESS sessions, CORS for localhost:3000, `/ws/**` public, all other routes require authentication. `JwtDecoder` bean: `NimbusJwtDecoder` pointed at `${clerk.jwks-uri}` with `JwtValidators.createDefaultWithIssuer(${clerk.issuer})` to enforce issuer. `ClerkAuthenticationFilter` injected as `securityFilterChain` method parameter (avoids `SecurityConfig` → `ClerkAuthenticationFilter` → `JwtDecoder` → `SecurityConfig` bean cycle).
 - `RedisConfig` — RedisTemplate<String, String> with StringRedisSerializer for keys and values. Connected via RedisConnectionFactory from application.properties
 
 ### Services
-- `UserService` — loadUserByUsername (Spring Security bridge), registerUser (email uniqueness check, BCrypt hash, save, return JWT). **To be removed — auth is moving to Clerk**
 - `RedisCacheService` — saveHypeScore, getHypeScore, updateTrendingScore, getTopTickers, isRateLimited, publishAlert
 - `RedditPollerService` — unauthenticated public JSON endpoints (/r/{subreddit}/hot.json), User-Agent header, fetchSubredditPosts, poll. Ticker mention extraction and SentimentEvent writing implemented.
 - `MarketDataService` — Alpha Vantage GLOBAL_QUOTE endpoint, fetchQuote returns AlphaVantageQuoteDto
@@ -41,8 +37,6 @@ This file tracks what has been built, what is in progress, known issues encounte
 ### DTOs
 - `AlphaVantageQuoteDto` — @JsonProperty mapped fields from Alpha Vantage GLOBAL_QUOTE response
 - `AlphaVantageResponseDto` — outer wrapper mapping "Global Quote" key to inner DTO
-- `AuthRequestDto` — email, password, fullName. **To be removed — auth is moving to Clerk**
-- `AuthResponseDto` — token. **To be removed — auth is moving to Clerk**
 - `TrendingTickerDto` — symbol, score, redditScore, newsScore, volumeScore, priceScore, verdict, priceChange, changePercent, mentionCount
 - `HypeBreakdownDto` — full deep dive DTO with symbol, scores, verdict, market data, scoreHistory, sources
 - `HypeScorePointDto` — timestamp + score for chart history
@@ -66,7 +60,6 @@ This file tracks what has been built, what is in progress, known issues encounte
 - `HypeDataService` — implemented: getLatestScore, getScoreHistory, getScoreHistory, getRecentEvents, getMentionCount, fetchQuote (delegates to MarketDataService)
 
 ### Controllers
-- `AuthController` — POST /api/auth/register. **To be removed — auth is moving to Clerk**
 - `TickerController` — GET /api/tickers/trending: returns top N tickers from Redis, enriched with HypeScore + Alpha Vantage quote, ordered by score desc
 - `HypeController` — GET /api/hype/{ticker}: full HypeBreakdownDto with 30-day history and 10 recent sources. GET /api/hype/{ticker}/history: paginated score history
 - `AlertController` — GET /api/alerts (user-scoped active alerts), POST /api/alerts (creates alert, 400 on duplicate/missing ticker), DELETE /api/alerts/{id} (soft delete, 403 if not owner)
@@ -99,6 +92,7 @@ This file tracks what has been built, what is in progress, known issues encounte
 - `src/lib/watchlist.ts` — localStorage helpers: `getWatchlist`, `addToWatchlist`, `removeFromWatchlist`, `isWatchlisted`. Keyed as `hyperadar:watchlist:{userId}`
 - `src/lib/alerts.ts` — localStorage helpers: `getAlerts`, `addAlert`, `removeAlert`. Alert type includes id, ticker, threshold, email, createdAt. Keyed as `hyperadar:alerts:{userId}`
 - `src/lib/mock-tickers.ts` — shared `MOCK_TICKERS` array (18 tickers) used by the watchlist page for base price/change/mention/hypeScore data
+- `src/lib/api.ts` — `apiGet`/`apiPost` helpers for internal Next.js routes; `apiFetch` Server Component helper that attaches the Clerk JWT (`Authorization: Bearer`) to every request to the Spring Boot backend (`NEXT_PUBLIC_API_URL`). Throws at module init if `NEXT_PUBLIC_API_URL` is unset. Uses `new Headers(options?.headers)` to safely merge caller headers before setting defaults.
 
 ### API Routes
 - `/api/yahoo-finance` — Next.js App Router GET route that proxies Yahoo Finance v8 chart API. Accepts `ticker`, `interval`, `range` query params. Returns raw Yahoo Finance JSON. Avoids browser CORS restrictions.
@@ -114,10 +108,9 @@ This file tracks what has been built, what is in progress, known issues encounte
 
 ## Up Next
 
-1. Clerk auth integration — replace custom auth layer, update SecurityConfig to verify Clerk JWTs (Alert already uses clerkUserId String; WatchlistItem already built)
-2. Alert services — AlertThresholdService full impl, EmailDispatcherService (Resend)
-3. WebSocketConfig and LiveWebSocketController full implementation
-4. Frontend wiring — switch dashboard to /api/tickers/trending, ticker deep dive to /api/hype/{ticker}, alerts to /api/alerts, watchlist to /api/watchlist (currently localStorage-backed)
+1. Alert services — AlertThresholdService full impl, EmailDispatcherService (Resend)
+2. WebSocketConfig and LiveWebSocketController full implementation
+3. Frontend wiring — switch dashboard to /api/tickers/trending, ticker deep dive to /api/hype/{ticker}, alerts to /api/alerts, watchlist to /api/watchlist (currently localStorage-backed). Use `apiFetch` from `src/lib/api.ts` for Server Components; use Clerk `useAuth().getToken()` inline for Client Components
 
 ---
 
@@ -127,7 +120,7 @@ This file tracks what has been built, what is in progress, known issues encounte
 |---|---|---|---|
 | 1 | Reddit Data API requires moderation use case approval for new app credentials | Resolved | Switched to unauthenticated public JSON endpoints (/r/{subreddit}/hot.json) with User-Agent header |
 | 2 | Finnhub free tier does not include candle, company-news, or stock metric endpoints | Resolved | Switched to Alpha Vantage GLOBAL_QUOTE which provides price, volume, and change data on the free tier |
-| 3 | Custom auth layer (UserService, JwtUtil, SecurityConfig) built before Clerk decision | Pending | Will be removed or archived when Clerk is integrated. Alert and WatchlistItem will use clerkUserId String instead of User FK |
+| 3 | Custom auth layer (UserService, JwtUtil, SecurityConfig) built before Clerk decision | Resolved | Removed all custom auth files. SecurityConfig rewritten with NimbusJwtDecoder pointed at Clerk JWKS URI. ClerkAuthenticationFilter extracts sub claim as principal. |
 | 4 | Ticker model originally included name and sector fields | Resolved | Removed both fields — tickers are discovered dynamically from content so name/sector are not available at creation time |
 | 5 | `react` and `react-dom` in package.json specified as `^18.0.0`, below the `^18.2.0` peer requirement of Next.js 16 | Resolved | Updated both to `^18.2.0` in package.json. Installed version was already 18.3.1 so no reinstall needed |
 | 6 | Yahoo Finance proxy route had no fetch timeout — slow upstream could block indefinitely | Resolved | Added AbortController with 8 s timeout; clears on success; distinguishes AbortError in error response |
@@ -137,6 +130,7 @@ This file tracks what has been built, what is in progress, known issues encounte
 | 10 | PriceChart useEffect only depended on `data`, leaving ResizeObserver alive against detached DOM during loading/error | Resolved | Added `loading` and `error` to the dependency array so cleanup fires immediately on state transitions |
 | 11 | `AbortError: signal is aborted without reason` surfaced as a Runtime error in the dev overlay on the deep dive page | Resolved | Two-part fix: (1) replaced `err instanceof Error && err.name === 'AbortError'` with `signal.aborted` — the definitive check that works regardless of whether the runtime throws a `DOMException` or `Error`; (2) added `.catch(() => {})` on the `loadChart(...)` call in the useEffect so any rejection that escapes the internal catch block never becomes an unhandled Promise rejection |
 | 12 | React hydration mismatch on `<body>` — Grammarly browser extension injects `data-new-gr-c-s-check-loaded` and `data-gr-ext-installed` attributes into the DOM before React hydrates, causing a server/client attribute diff | Resolved | Added `suppressHydrationWarning` to `<body>` in `src/app/layout.tsx`. This tells React to skip attribute-level comparison on the body element without suppressing child hydration errors |
+| 13 | `frontend/.env.local` was committed to git (no root `.gitignore` existed), exposing `CLERK_SECRET_KEY` in history | Resolved | Replaced real key with placeholder in the file. **Action required: rotate the Clerk secret key at dashboard.clerk.com immediately.** Add `frontend/.env.local` to a root `.gitignore` before next commit. |
 
 ---
 
@@ -146,4 +140,4 @@ This file tracks what has been built, what is in progress, known issues encounte
 - **Loughran-McDonald dictionary for sentiment** — professional-grade financial NLP lexicon used instead of hand-picked keyword lists. 86,000+ words loaded into memory at startup via @PostConstruct
 - **Reddit unauthenticated polling** — Reddit's Data API now requires approval. Public JSON endpoints are sufficient for post title scanning and mention counting
 - **Alpha Vantage over Finnhub** — Finnhub's useful endpoints (candle, news, metrics) are behind a paywall. Alpha Vantage GLOBAL_QUOTE provides price, volume, and change data on the free tier
-- **Clerk over custom JWT auth** — auth is not a differentiator for this project. Clerk handles registration, login, and session management. Backend will verify Clerk JWTs via JWKS endpoint
+- **Clerk over custom JWT auth** — auth is not a differentiator for this project. Clerk handles registration, login, and session management. Backend verifies Clerk JWTs via `NimbusJwtDecoder` pointed at `{clerk-frontend-api}/.well-known/jwks.json`. The Clerk `sub` claim (e.g. `user_2abc123`) is used as the user identifier across all user-scoped tables (Alert, WatchlistItem)
