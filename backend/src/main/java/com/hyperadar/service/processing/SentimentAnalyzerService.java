@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @AllArgsConstructor
@@ -29,32 +30,26 @@ public class SentimentAnalyzerService {
     );
 
     public Map<Ticker, Double> computeRedditScores() {
-        List<Ticker> tickers = tickerRepository.findAll();
-        LocalDateTime since = LocalDateTime.now().minusHours(24);
-        Map<Ticker, Double> scores = new HashMap<>();
-
-        for (Ticker ticker : tickers) {
-            List<SentimentEvent> events = sentimentEventRepository
-                    .findByTickerAndCreatedAtAfter(ticker, since)
-                    .stream()
-                    .filter(e -> e.getSource() == SentimentEvent.Source.REDDIT)
-                    .toList();
-            scores.put(ticker, computeScore(events));
-        }
-        return scores;
+        return computeScores(EnumSet.of(SentimentEvent.Source.REDDIT));
     }
 
     public Map<Ticker, Double> computeNewsScores() {
+        return computeScores(NEWS_SOURCES);
+    }
+
+    private Map<Ticker, Double> computeScores(Set<SentimentEvent.Source> sources) {
         List<Ticker> tickers = tickerRepository.findAll();
         LocalDateTime since = LocalDateTime.now().minusHours(24);
-        Map<Ticker, Double> scores = new HashMap<>();
 
+        Map<Ticker, List<SentimentEvent>> byTicker = sentimentEventRepository
+                .findByCreatedAtAfter(since)
+                .stream()
+                .filter(e -> sources.contains(e.getSource()))
+                .collect(Collectors.groupingBy(SentimentEvent::getTicker));
+
+        Map<Ticker, Double> scores = new HashMap<>();
         for (Ticker ticker : tickers) {
-            List<SentimentEvent> events = sentimentEventRepository
-                    .findByTickerAndCreatedAtAfter(ticker, since)
-                    .stream()
-                    .filter(e -> NEWS_SOURCES.contains(e.getSource()))
-                    .toList();
+            List<SentimentEvent> events = byTicker.getOrDefault(ticker, List.of());
             scores.put(ticker, computeScore(events));
         }
         return scores;

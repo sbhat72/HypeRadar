@@ -7,11 +7,13 @@ import com.hyperadar.repository.HypeScoreRepository;
 import com.hyperadar.repository.TickerRepository;
 import com.hyperadar.service.ingestion.MarketDataService;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+@Slf4j
 @Service
 @AllArgsConstructor
 public class BullishBearishClassifierService {
@@ -30,13 +32,13 @@ public class BullishBearishClassifierService {
             try {
                 classifyTicker(ticker);
             } catch (Exception e) {
-                // skip ticker on error without propagating
+                log.warn("Failed to classify ticker {}: {}", ticker.getSymbol(), e.getMessage(), e);
             }
         }
     }
 
     private void classifyTicker(Ticker ticker) {
-        List<HypeScore> recent = hypeScoreRepository.findByTickerOrderByCreatedAtDesc(ticker);
+        List<HypeScore> recent = hypeScoreRepository.findTop2ByTickerOrderByCreatedAtDesc(ticker);
         if (recent.size() < 2) {
             return;
         }

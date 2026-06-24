@@ -8,4 +8,5 @@ import java.util.List;
 
 public interface SentimentEventRepository extends JpaRepository<SentimentEvent, Long> {
     List<SentimentEvent> findByTickerAndCreatedAtAfter(Ticker ticker, LocalDateTime after);
+    List<SentimentEvent> findByCreatedAtAfter(LocalDateTime after);
 }

@@ -8,13 +8,14 @@ import com.hyperadar.repository.TickerRepository;
 import com.hyperadar.service.RedisCacheService;
 import com.hyperadar.service.ingestion.MarketDataService;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @Service
 @AllArgsConstructor
 public class HypeScoreEngineService {
@@ -25,7 +26,9 @@ public class HypeScoreEngineService {
     private final TickerRepository tickerRepository;
     private final RedisCacheService redisCacheService;
 
-    @Transactional
+    // No @Transactional here — each hypeScoreRepository.save() commits its own
+    // transaction immediately, so Redis writes that follow are never ahead of an
+    // uncommitted DB state.
     public void computeAll() {
         List<Ticker> tickers = tickerRepository.findAll();
         if (tickers.isEmpty()) {
@@ -40,6 +43,7 @@ public class HypeScoreEngineService {
             try {
                 quotes.put(ticker, marketDataService.fetchQuote(ticker.getSymbol()));
             } catch (Exception e) {
+                log.warn("Failed to fetch quote for {}: {}", ticker.getSymbol(), e.getMessage(), e);
                 quotes.put(ticker, null);
             }
         }
