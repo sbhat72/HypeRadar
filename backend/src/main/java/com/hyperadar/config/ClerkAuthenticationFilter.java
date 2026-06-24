@@ -43,6 +43,12 @@ public class ClerkAuthenticationFilter extends OncePerRequestFilter {
             Jwt jwt = jwtDecoder.decode(token);
             String clerkUserId = jwt.getSubject();
 
+            if (clerkUserId == null || clerkUserId.isBlank()) {
+                SecurityContextHolder.clearContext();
+                filterChain.doFilter(request, response);
+                return;
+            }
+
             UsernamePasswordAuthenticationToken authentication =
                 new UsernamePasswordAuthenticationToken(clerkUserId, null, List.of());
 

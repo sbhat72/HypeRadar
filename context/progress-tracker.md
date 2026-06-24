@@ -21,8 +21,8 @@ This file tracks what has been built, what is in progress, known issues encounte
 - `HistoricalEventRepository` — base JpaRepository only
 
 ### Config
-- `ClerkAuthenticationFilter` — OncePerRequestFilter that reads the `Authorization: Bearer` header, decodes the Clerk JWT via `JwtDecoder`, extracts the `sub` claim (Clerk user ID), and sets it as the authenticated principal in `SecurityContextHolder`. Passes through on missing/invalid token.
-- `SecurityConfig` — Spring Security 6, CSRF disabled, STATELESS sessions, CORS for localhost:3000, `/ws/**` public, all other routes require authentication. `JwtDecoder` bean pointed at Clerk JWKS URI (`${clerk.jwks-uri}`). Uses `ClerkAuthenticationFilter` in place of old custom filter.
+- `ClerkAuthenticationFilter` — OncePerRequestFilter that reads the `Authorization: Bearer` header, decodes the Clerk JWT via `JwtDecoder`, validates the `sub` claim is non-null/non-blank, and sets it as the authenticated principal in `SecurityContextHolder`. Passes through on missing/invalid token or missing sub.
+- `SecurityConfig` — Spring Security 6, CSRF disabled, STATELESS sessions, CORS for localhost:3000, `/ws/**` public, all other routes require authentication. `JwtDecoder` bean: `NimbusJwtDecoder` pointed at `${clerk.jwks-uri}` with `JwtValidators.createDefaultWithIssuer(${clerk.issuer})` to enforce issuer. `ClerkAuthenticationFilter` injected as `securityFilterChain` method parameter (avoids `SecurityConfig` → `ClerkAuthenticationFilter` → `JwtDecoder` → `SecurityConfig` bean cycle).
 - `RedisConfig` — RedisTemplate<String, String> with StringRedisSerializer for keys and values. Connected via RedisConnectionFactory from application.properties
 
 ### Services
@@ -92,7 +92,7 @@ This file tracks what has been built, what is in progress, known issues encounte
 - `src/lib/watchlist.ts` — localStorage helpers: `getWatchlist`, `addToWatchlist`, `removeFromWatchlist`, `isWatchlisted`. Keyed as `hyperadar:watchlist:{userId}`
 - `src/lib/alerts.ts` — localStorage helpers: `getAlerts`, `addAlert`, `removeAlert`. Alert type includes id, ticker, threshold, email, createdAt. Keyed as `hyperadar:alerts:{userId}`
 - `src/lib/mock-tickers.ts` — shared `MOCK_TICKERS` array (18 tickers) used by the watchlist page for base price/change/mention/hypeScore data
-- `src/lib/api.ts` — `apiGet`/`apiPost` helpers for internal Next.js routes; `apiFetch` Server Component helper that attaches the Clerk JWT (`Authorization: Bearer`) to every request to the Spring Boot backend (`NEXT_PUBLIC_API_URL`)
+- `src/lib/api.ts` — `apiGet`/`apiPost` helpers for internal Next.js routes; `apiFetch` Server Component helper that attaches the Clerk JWT (`Authorization: Bearer`) to every request to the Spring Boot backend (`NEXT_PUBLIC_API_URL`). Throws at module init if `NEXT_PUBLIC_API_URL` is unset. Uses `new Headers(options?.headers)` to safely merge caller headers before setting defaults.
 
 ### API Routes
 - `/api/yahoo-finance` — Next.js App Router GET route that proxies Yahoo Finance v8 chart API. Accepts `ticker`, `interval`, `range` query params. Returns raw Yahoo Finance JSON. Avoids browser CORS restrictions.
@@ -130,6 +130,7 @@ This file tracks what has been built, what is in progress, known issues encounte
 | 10 | PriceChart useEffect only depended on `data`, leaving ResizeObserver alive against detached DOM during loading/error | Resolved | Added `loading` and `error` to the dependency array so cleanup fires immediately on state transitions |
 | 11 | `AbortError: signal is aborted without reason` surfaced as a Runtime error in the dev overlay on the deep dive page | Resolved | Two-part fix: (1) replaced `err instanceof Error && err.name === 'AbortError'` with `signal.aborted` — the definitive check that works regardless of whether the runtime throws a `DOMException` or `Error`; (2) added `.catch(() => {})` on the `loadChart(...)` call in the useEffect so any rejection that escapes the internal catch block never becomes an unhandled Promise rejection |
 | 12 | React hydration mismatch on `<body>` — Grammarly browser extension injects `data-new-gr-c-s-check-loaded` and `data-gr-ext-installed` attributes into the DOM before React hydrates, causing a server/client attribute diff | Resolved | Added `suppressHydrationWarning` to `<body>` in `src/app/layout.tsx`. This tells React to skip attribute-level comparison on the body element without suppressing child hydration errors |
+| 13 | `frontend/.env.local` was committed to git (no root `.gitignore` existed), exposing `CLERK_SECRET_KEY` in history | Resolved | Replaced real key with placeholder in the file. **Action required: rotate the Clerk secret key at dashboard.clerk.com immediately.** Add `frontend/.env.local` to a root `.gitignore` before next commit. |
 
 ---
 
