@@ -9,12 +9,12 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "alerts")
+@Table(name = "watchlist_items")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class Alert {
+public class WatchlistItem {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -27,24 +27,7 @@ public class Alert {
     @JoinColumn(name = "ticker_id", nullable = false)
     private Ticker ticker;
 
-    @Column(nullable = false)
-    private Double threshold;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private NotificationType notificationType;
-
-    @Column(name = "is_active", nullable = false)
-    private boolean isActive;
-
-    @Column(name = "last_triggered_at")
-    private LocalDateTime lastTriggeredAt;
-
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
-
-    public enum NotificationType {
-        EMAIL
-    }
 }

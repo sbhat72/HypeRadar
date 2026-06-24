@@ -43,9 +43,35 @@ This file tracks what has been built, what is in progress, known issues encounte
 - `AlphaVantageResponseDto` — outer wrapper mapping "Global Quote" key to inner DTO
 - `AuthRequestDto` — email, password, fullName. **To be removed — auth is moving to Clerk**
 - `AuthResponseDto` — token. **To be removed — auth is moving to Clerk**
+- `TrendingTickerDto` — symbol, score, redditScore, newsScore, volumeScore, priceScore, verdict, priceChange, changePercent, mentionCount
+- `HypeBreakdownDto` — full deep dive DTO with symbol, scores, verdict, market data, scoreHistory, sources
+- `HypeScorePointDto` — timestamp + score for chart history
+- `SentimentSourceDto` — source, content, polarity (all String)
+- `AlertRequestDto` — tickerSymbol (validated: not blank, 1–5 uppercase chars), threshold (0.0–100.0)
+- `AlertResponseDto` — id, tickerSymbol, threshold, notificationType, createdAt, lastTriggeredAt
+- `WatchlistItemDto` — id, tickerSymbol, addedAt
+- `HistoricalEventDto` — id, tickerSymbol, eventName, description, startDate, endDate
+
+### Models (additions)
+- `WatchlistItem` — clerkUserId String, ticker FK, createdAt. Entity for watchlist_items table.
+- `Alert` — updated: replaced User FK with clerkUserId String to support Clerk auth
+
+### Repositories (additions/updates)
+- `WatchlistItemRepository` — findByClerkUserId, findByClerkUserIdAndTicker, deleteByClerkUserIdAndTicker
+- `AlertRepository` — updated: replaced findByUserAndIsActiveTrue with findByClerkUserIdAndIsActiveTrue and findByClerkUserIdAndTickerAndIsActiveTrue
+- `HypeScoreRepository` — added findByTickerAndCreatedAtAfterOrderByCreatedAtAsc for history queries
+- `SentimentEventRepository` — added findByTickerOrderByCreatedAtDesc(Ticker, Pageable) for recent events with limit
+
+### Services (additions)
+- `HypeDataService` — implemented: getLatestScore, getScoreHistory, getScoreHistory, getRecentEvents, getMentionCount, fetchQuote (delegates to MarketDataService)
 
 ### Controllers
 - `AuthController` — POST /api/auth/register. **To be removed — auth is moving to Clerk**
+- `TickerController` — GET /api/tickers/trending: returns top N tickers from Redis, enriched with HypeScore + Alpha Vantage quote, ordered by score desc
+- `HypeController` — GET /api/hype/{ticker}: full HypeBreakdownDto with 30-day history and 10 recent sources. GET /api/hype/{ticker}/history: paginated score history
+- `AlertController` — GET /api/alerts (user-scoped active alerts), POST /api/alerts (creates alert, 400 on duplicate/missing ticker), DELETE /api/alerts/{id} (soft delete, 403 if not owner)
+- `HistoryController` — GET /api/history (all events), GET /api/history/{id} (404 if not found)
+- `WatchlistController` — GET /api/watchlist, POST /api/watchlist/{ticker} (400 on duplicate), DELETE /api/watchlist/{ticker} (403 if not owned)
 
 ### Resources
 - `Loughran-McDonald_MasterDictionary_1993-2025.csv` — 86,000+ word financial sentiment lexicon loaded at startup by RssFeedParserService
@@ -88,13 +114,10 @@ This file tracks what has been built, what is in progress, known issues encounte
 
 ## Up Next
 
-1. Clerk auth integration — replace custom auth layer, update SecurityConfig to verify Clerk JWTs, store clerkUserId on Alert and WatchlistItem
-4. Alert services — AlertThresholdService, EmailDispatcherService (Resend)
-5. WatchlistItem model and repository (new — not in original scaffold)
-6. REST controllers — TickerController, HypeController, AlertController, HistoryController, WatchlistController
-7. WebSocketConfig and LiveWebSocketController
-8. Remaining DTOs — TrendingTickerDto, HypeBreakdownDto, AlertRequestDto, AlertResponseDto, HypeUpdateMessage, WatchlistDto
-9. Frontend — Next.js 15 with Clerk, dashboard, ticker deep dive, watchlist, alerts, history
+1. Clerk auth integration — replace custom auth layer, update SecurityConfig to verify Clerk JWTs (Alert already uses clerkUserId String; WatchlistItem already built)
+2. Alert services — AlertThresholdService full impl, EmailDispatcherService (Resend)
+3. WebSocketConfig and LiveWebSocketController full implementation
+4. Frontend wiring — switch dashboard to /api/tickers/trending, ticker deep dive to /api/hype/{ticker}, alerts to /api/alerts, watchlist to /api/watchlist (currently localStorage-backed)
 
 ---
 
