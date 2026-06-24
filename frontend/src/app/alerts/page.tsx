@@ -1,51 +1,31 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { useUser } from '@clerk/nextjs'
-import { getAlerts, addAlert, removeAlert, Alert } from '@/lib/alerts'
+import { useUser, useAuth } from '@clerk/nextjs'
+import { useApiClient } from '@/lib/api-client'
 
 const TICKER_RE = /^[A-Z]{1,5}$/
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080'
+
+interface AlertResponse {
+  id: number
+  tickerSymbol: string
+  threshold: number
+  notificationType: string
+  createdAt: string
+  lastTriggeredAt: string | null
+}
 
 const MOCK_TRIGGERED = [
-  {
-    id: 't1',
-    ticker: 'GME',
-    threshold: 75,
-    firedScore: 89,
-    firedAt: '2025-01-15T14:32:00Z',
-  },
-  {
-    id: 't2',
-    ticker: 'NVDA',
-    threshold: 80,
-    firedScore: 92,
-    firedAt: '2025-02-03T09:17:00Z',
-  },
-  {
-    id: 't3',
-    ticker: 'TSLA',
-    threshold: 65,
-    firedScore: 71,
-    firedAt: '2025-03-21T16:45:00Z',
-  },
-  {
-    id: 't4',
-    ticker: 'AMC',
-    threshold: 60,
-    firedScore: 84,
-    firedAt: '2025-04-08T11:22:00Z',
-  },
+  { id: 't1', ticker: 'GME',  threshold: 75, firedScore: 89, firedAt: '2025-01-15T14:32:00Z' },
+  { id: 't2', ticker: 'NVDA', threshold: 80, firedScore: 92, firedAt: '2025-02-03T09:17:00Z' },
+  { id: 't3', ticker: 'TSLA', threshold: 65, firedScore: 71, firedAt: '2025-03-21T16:45:00Z' },
+  { id: 't4', ticker: 'AMC',  threshold: 60, firedScore: 84, firedAt: '2025-04-08T11:22:00Z' },
 ]
 
 function formatDate(iso: string): string {
   const d = new Date(iso)
-  return d.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
 function TrashIcon() {
@@ -61,18 +41,32 @@ function TrashIcon() {
 
 export default function AlertsPage() {
   const { user, isLoaded } = useUser()
+  const { getToken } = useAuth()
+  const { apiCall } = useApiClient()
 
-  const [alerts, setAlerts] = useState<Alert[]>([])
+  const [alerts, setAlerts] = useState<AlertResponse[]>([])
   const [ticker, setTicker] = useState('')
   const [threshold, setThreshold] = useState(70)
   const [tickerError, setTickerError] = useState('')
+  const [formError, setFormError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    if (!isLoaded || !user?.id) return
-    setAlerts(getAlerts(user.id))
-  }, [isLoaded, user?.id])
+    if (!isLoaded) return
+    loadAlerts()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded])
+
+  async function loadAlerts() {
+    try {
+      const data: AlertResponse[] = await apiCall('/api/alerts')
+      setAlerts(data)
+    } catch {
+      // leave alerts empty on error
+    }
+  }
 
   function showToast(msg: string) {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
@@ -80,33 +74,64 @@ export default function AlertsPage() {
     toastTimerRef.current = setTimeout(() => setToast(null), 3000)
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!user?.id) return
     if (!TICKER_RE.test(ticker)) {
       setTickerError('Ticker must be 1–5 uppercase letters (e.g. TSLA)')
       return
     }
     setTickerError('')
-    const email = user.primaryEmailAddress?.emailAddress ?? ''
-    const newAlert: Alert = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      ticker,
-      threshold,
-      email,
-      createdAt: new Date().toISOString(),
+    setFormError('')
+    setSubmitting(true)
+
+    try {
+      const token = await getToken()
+      const res = await fetch(`${API_BASE}/api/alerts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ tickerSymbol: ticker, threshold }),
+      })
+
+      if (!res.ok) {
+        if (res.status === 400) {
+          const text = await res.text().catch(() => '')
+          if (
+            text.toLowerCase().includes('duplicate') ||
+            text.toLowerCase().includes('already exists') ||
+            text.toLowerCase().includes('already have')
+          ) {
+            setFormError(`An active alert already exists for ${ticker}`)
+          } else {
+            setFormError('Ticker not found')
+          }
+        } else {
+          setFormError('Failed to create alert. Please try again.')
+        }
+        return
+      }
+
+      await loadAlerts()
+      const savedTicker = ticker
+      setTicker('')
+      setThreshold(70)
+      showToast(`Alert set for ${savedTicker} at hype score ${threshold}`)
+    } catch {
+      setFormError('Failed to create alert. Please try again.')
+    } finally {
+      setSubmitting(false)
     }
-    addAlert(user.id, newAlert)
-    setAlerts(prev => [...prev, newAlert])
-    setTicker('')
-    setThreshold(70)
-    showToast(`Alert set for ${newAlert.ticker} at hype score ${threshold}`)
   }
 
-  function handleDelete(id: string) {
-    if (!user?.id) return
-    removeAlert(user.id, id)
-    setAlerts(prev => prev.filter(a => a.id !== id))
+  async function handleDelete(id: number) {
+    try {
+      await apiCall(`/api/alerts/${id}`, { method: 'DELETE' })
+      setAlerts(prev => prev.filter(a => a.id !== id))
+    } catch {
+      // silently fail
+    }
   }
 
   if (!isLoaded) {
@@ -177,6 +202,7 @@ export default function AlertsPage() {
                 onChange={e => {
                   setTicker(e.target.value.toUpperCase())
                   if (tickerError) setTickerError('')
+                  if (formError) setFormError('')
                 }}
                 placeholder="e.g. TSLA"
                 maxLength={5}
@@ -240,19 +266,27 @@ export default function AlertsPage() {
               />
             </div>
 
+            {/* Inline form error */}
+            {formError && (
+              <p className="text-xs font-mono" style={{ color: '#FF6166' }}>
+                {formError}
+              </p>
+            )}
+
             {/* Submit */}
             <button
               type="submit"
-              className="w-full py-3 rounded-xl font-mono font-bold text-sm transition-all duration-150 mt-1"
+              disabled={submitting}
+              className="w-full py-3 rounded-xl font-mono font-bold text-sm transition-all duration-150 mt-1 disabled:opacity-60"
               style={{
                 backgroundColor: 'var(--hype-green-bg)',
                 color: 'var(--hype-green)',
                 border: '1px solid var(--hype-green)',
               }}
-              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#62C07322')}
-              onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'var(--hype-green-bg)')}
+              onMouseEnter={e => { if (!submitting) e.currentTarget.style.backgroundColor = '#62C07322' }}
+              onMouseLeave={e => { if (!submitting) e.currentTarget.style.backgroundColor = 'var(--hype-green-bg)' }}
             >
-              Set Alert
+              {submitting ? 'Setting Alert…' : 'Set Alert'}
             </button>
           </form>
         </div>
@@ -284,7 +318,7 @@ export default function AlertsPage() {
                 <div className="flex flex-col gap-2 min-w-0">
                   <div className="flex items-center gap-3 flex-wrap">
                     <span className="text-xl font-black font-mono tracking-widest" style={{ color: 'var(--text-primary)' }}>
-                      {alert.ticker}
+                      {alert.tickerSymbol}
                     </span>
                     <span
                       className="text-xs font-mono font-bold px-2 py-0.5 rounded"
@@ -297,7 +331,7 @@ export default function AlertsPage() {
                     Hype score ≥ {alert.threshold}
                   </div>
                   <div className="text-xs font-mono truncate" style={{ color: 'var(--text-muted)' }}>
-                    {alert.email}
+                    {email}
                   </div>
                 </div>
 
