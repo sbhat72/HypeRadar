@@ -4,17 +4,17 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class AlertResponseDto {
+public class HistoricalEventDto {
     private Long id;
     private String tickerSymbol;
-    private Double threshold;
-    private String notificationType;
-    private LocalDateTime createdAt;
-    private LocalDateTime lastTriggeredAt;
+    private String eventName;
+    private String description;
+    private LocalDate startDate;
+    private LocalDate endDate;
 }

@@ -10,11 +10,8 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class AlertResponseDto {
+public class WatchlistItemDto {
     private Long id;
     private String tickerSymbol;
-    private Double threshold;
-    private String notificationType;
-    private LocalDateTime createdAt;
-    private LocalDateTime lastTriggeredAt;
+    private LocalDateTime addedAt;
 }
