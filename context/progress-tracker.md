@@ -58,6 +58,12 @@ This file tracks what has been built, what is in progress, known issues encounte
 - **Alerts** — `/alerts`. Protected page. Create alert form: ticker input (uppercase, 1–5 chars with inline validation), hype threshold slider (0–100, green track below thumb, red above, default 70), read-only Clerk email field (greyed out). Active alerts list reads from localStorage (`hyperadar:alerts:{userId}`) — each card shows ticker, threshold, email, Active badge, trash-icon delete button. Empty state when no alerts. Triggered alerts history section with 4 mock entries showing ticker, threshold, fired score, date, and Triggered orange badge. 3-second success toast bottom-right after creating alert. Spec: `context/feature-specs/05-alerts.md`
 - **History** — `/history`. Protected page. Curated timeline of 6 famous meme stock / hype-driven events (GME short squeeze, AMC squeeze, NVDA AI surge, BBBY squeeze, DOGE Elon pump, Roaring Kitty returns). Page header with `Hype` in green (#62C073) and `History` in red (#FF6166). Vertical timeline connector on left side with colour-coded dots per tag type. Each event card shows tag badge (Short Squeeze/Meme Stock/Earnings Catalyst/Social Media Pump with distinct accent colours), ticker, event name, date range, description, peak price and peak gain (both in green), and a View Chart / Close Chart toggle button. Clicking View Chart fetches real historical data from Yahoo Finance via a new `/api/yahoo-finance-history` proxy route (period1/period2 Unix timestamp params) and renders an area chart using lightweight-charts v5 with a peak price arrowDown marker via `createSeriesMarkers`. All event data is hardcoded. Loading and error states handled inline. Spec: `context/feature-specs/06-history.md`
 
+### Schedulers
+- `DataPipelineScheduler` — `@Scheduled(fixedDelay = 300000)`. Polls Reddit, parses RSS, then runs `HypeScoreEngineService.computeAll()`, `BullishBearishClassifierService.classifyAll()`, and `LiveWebSocketController.broadcastUpdate()`. Reddit and RSS steps each have their own try/catch; the processing block has a shared try/catch. Logs pipeline start and end with timestamp.
+- `AlertScheduler` — `@Scheduled(fixedDelay = 120000)`. Fetches all active alerts from PostgreSQL, reads hype score from Redis (skips on cache miss), enforces 4-hour deduplication window, delegates to `AlertThresholdService.fireAlert()` when threshold crossed. Each alert wrapped in its own try/catch.
+- `LiveWebSocketController.broadcastUpdate()` — stub added; full WebSocket implementation is a future task.
+- `AlertThresholdService.fireAlert()` — stub added; email dispatch and `lastTriggeredAt` update are a future task.
+
 ### Frontend Components
 - `TrendingTickerCard` — card component with heat indicator (5 signal bars, blue→orange→red based on mention intensity), price flash animation (green/red CSS keyframe triggered by price change direction)
 - `PriceChart` — client component wrapping lightweight-charts v5 AreaSeries. Accepts `ChartPoint[]` (Unix-second timestamps + close values), handles resize via ResizeObserver, dynamic import to avoid SSR issues
@@ -82,8 +88,7 @@ This file tracks what has been built, what is in progress, known issues encounte
 
 ## Up Next
 
-1. Schedulers — DataPipelineScheduler, AlertScheduler
-3. Clerk auth integration — replace custom auth layer, update SecurityConfig to verify Clerk JWTs, store clerkUserId on Alert and WatchlistItem
+1. Clerk auth integration — replace custom auth layer, update SecurityConfig to verify Clerk JWTs, store clerkUserId on Alert and WatchlistItem
 4. Alert services — AlertThresholdService, EmailDispatcherService (Resend)
 5. WatchlistItem model and repository (new — not in original scaffold)
 6. REST controllers — TickerController, HypeController, AlertController, HistoryController, WatchlistController
