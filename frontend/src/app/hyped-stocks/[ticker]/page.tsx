@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useUser } from '@clerk/nextjs'
 import PriceChart, { type ChartPoint } from '@/components/ticker/PriceChart'
-import { useApiClient } from '@/lib/api-client'
+import { useApiClient } from '@/lib/useApiClient'
 
 const TIME_RANGES = [
   { label: '1D', interval: '5m',  range: '1d'  },
@@ -106,8 +106,27 @@ export default function TickerDeepDivePage() {
 
   useEffect(() => {
     if (!isLoaded || !ticker) return
-    fetchHypeData()
-    fetchWatchlistStatus()
+    let active = true
+
+    setHypeLoading(true)
+    setHypeError(null)
+
+    apiCall(`/api/hype/${ticker}`)
+      .then((data: HypeBreakdownDto) => { if (active) setHypeData(data) })
+      .catch((err: unknown) => {
+        if (!active) return
+        if (err instanceof Error && err.message.includes('404')) setHypeError('not_found')
+        else setHypeError('failed')
+      })
+      .finally(() => { if (active) setHypeLoading(false) })
+
+    apiCall('/api/watchlist')
+      .then((items: WatchlistItemDto[]) => {
+        if (active) setWatchlisted(items.some(item => item.tickerSymbol === ticker))
+      })
+      .catch(() => {})
+
+    return () => { active = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded, ticker])
 
@@ -125,15 +144,6 @@ export default function TickerDeepDivePage() {
       }
     } finally {
       setHypeLoading(false)
-    }
-  }
-
-  async function fetchWatchlistStatus() {
-    try {
-      const items: WatchlistItemDto[] = await apiCall('/api/watchlist')
-      setWatchlisted(items.some(item => item.tickerSymbol === ticker))
-    } catch {
-      // leave watchlisted as false
     }
   }
 

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@clerk/nextjs'
 import { MOCK_TICKERS } from '@/lib/mock-tickers'
-import { useApiClient } from '@/lib/api-client'
+import { useApiClient } from '@/lib/useApiClient'
 
 const TIME_TABS = ['1H', '1D', '1W', '1M', '1Y'] as const
 type TimeTab = typeof TIME_TABS[number]

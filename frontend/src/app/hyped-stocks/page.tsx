@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import TrendingTickerCard, { type TickerData, type FlashEntry } from '@/components/dashboard/TrendingTickerCard'
-import { useApiClient } from '@/lib/api-client'
+import { useApiClient } from '@/lib/useApiClient'
 
 interface TrendingTickerDto {
   symbol: string
@@ -49,7 +49,6 @@ export default function HypedStocksPage() {
       const data: TrendingTickerDto[] = await apiCall('/api/tickers/trending?limit=20')
       setTickers(data.map(d => ({
         symbol: d.symbol,
-        price: Math.abs(d.priceChange) || 0.01,
         change: d.priceChange,
         changePercent: d.changePercent,
         mentions: d.mentionCount,
@@ -77,6 +76,11 @@ export default function HypedStocksPage() {
         if (prev.length === 0) return prev
         return prev.map(ticker => {
           if (Math.random() > 0.6) return ticker
+
+          if (ticker.price === undefined) {
+            newFlashes[ticker.symbol] = { dir: Math.random() >= 0.5 ? 'up' : 'down', ts: now }
+            return ticker
+          }
 
           const nudge = (Math.random() - 0.48) * ticker.price * 0.006
           const newPrice = Math.max(0.01, +(ticker.price + nudge).toFixed(2))

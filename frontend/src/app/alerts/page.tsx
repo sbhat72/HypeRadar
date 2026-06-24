@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useUser, useAuth } from '@clerk/nextjs'
-import { useApiClient } from '@/lib/api-client'
+import { useApiClient } from '@/lib/useApiClient'
 
 const TICKER_RE = /^[A-Z]{1,5}$/
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080'
@@ -14,18 +14,6 @@ interface AlertResponse {
   notificationType: string
   createdAt: string
   lastTriggeredAt: string | null
-}
-
-const MOCK_TRIGGERED = [
-  { id: 't1', ticker: 'GME',  threshold: 75, firedScore: 89, firedAt: '2025-01-15T14:32:00Z' },
-  { id: 't2', ticker: 'NVDA', threshold: 80, firedScore: 92, firedAt: '2025-02-03T09:17:00Z' },
-  { id: 't3', ticker: 'TSLA', threshold: 65, firedScore: 71, firedAt: '2025-03-21T16:45:00Z' },
-  { id: 't4', ticker: 'AMC',  threshold: 60, firedScore: 84, firedAt: '2025-04-08T11:22:00Z' },
-]
-
-function formatDate(iso: string): string {
-  const d = new Date(iso)
-  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
 function TrashIcon() {
@@ -45,6 +33,7 @@ export default function AlertsPage() {
   const { apiCall } = useApiClient()
 
   const [alerts, setAlerts] = useState<AlertResponse[]>([])
+  const [loadError, setLoadError] = useState(false)
   const [ticker, setTicker] = useState('')
   const [threshold, setThreshold] = useState(70)
   const [tickerError, setTickerError] = useState('')
@@ -63,8 +52,9 @@ export default function AlertsPage() {
     try {
       const data: AlertResponse[] = await apiCall('/api/alerts')
       setAlerts(data)
+      setLoadError(false)
     } catch {
-      // leave alerts empty on error
+      setLoadError(true)
     }
   }
 
@@ -298,7 +288,27 @@ export default function AlertsPage() {
           </h2>
         </div>
 
-        {alerts.length === 0 ? (
+        {loadError ? (
+          <div
+            className="rounded-2xl p-8 mb-10 text-center"
+            style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)' }}
+          >
+            <p className="font-mono text-sm mb-3" style={{ color: 'var(--text-muted)' }}>
+              Could not load alerts.
+            </p>
+            <button
+              onClick={loadAlerts}
+              className="px-4 py-2 rounded-xl font-mono text-sm font-bold transition-all"
+              style={{
+                backgroundColor: 'var(--bg-elevated)',
+                border: '1px solid var(--border-default)',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        ) : alerts.length === 0 ? (
           <div
             className="rounded-2xl p-8 mb-10 text-center"
             style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)' }}
@@ -358,36 +368,13 @@ export default function AlertsPage() {
           </h2>
         </div>
 
-        <div className="flex flex-col gap-3 pb-8">
-          {MOCK_TRIGGERED.map(t => (
-            <div
-              key={t.id}
-              className="rounded-xl p-5"
-              style={{ backgroundColor: 'var(--bg-subtle)', border: '1px solid var(--border-subtle)' }}
-            >
-              <div className="flex items-start justify-between gap-4 flex-wrap">
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <span className="text-lg font-black font-mono tracking-widest" style={{ color: 'var(--text-primary)' }}>
-                      {t.ticker}
-                    </span>
-                    <span
-                      className="text-xs font-mono font-bold px-2 py-0.5 rounded"
-                      style={{ backgroundColor: '#FF990A22', color: '#FF990A' }}
-                    >
-                      Triggered
-                    </span>
-                  </div>
-                  <div className="text-sm font-mono" style={{ color: 'var(--text-secondary)' }}>
-                    Threshold: {t.threshold} · Fired at hype score {t.firedScore}
-                  </div>
-                  <div className="text-xs font-mono" style={{ color: 'var(--text-faint)' }}>
-                    {formatDate(t.firedAt)}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
+        <div
+          className="rounded-xl p-6 pb-8 text-center"
+          style={{ backgroundColor: 'var(--bg-subtle)', border: '1px solid var(--border-subtle)' }}
+        >
+          <p className="font-mono text-sm" style={{ color: 'var(--text-muted)' }}>
+            Triggered alert history will be available once the email service is enabled.
+          </p>
         </div>
       </div>
 
