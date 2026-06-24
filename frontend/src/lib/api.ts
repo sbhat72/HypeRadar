@@ -22,6 +22,9 @@ export async function apiFetch(path: string, options?: RequestInit) {
   const { auth } = await import('@clerk/nextjs/server')
   const { getToken } = await auth()
   const token = await getToken()
+  if (!token) {
+    throw new Error('No Clerk token available — user may not be signed in')
+  }
 
   const headers = new Headers(options?.headers)
   if (!headers.has('Content-Type')) {
