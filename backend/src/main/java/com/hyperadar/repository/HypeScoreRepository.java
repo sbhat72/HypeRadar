@@ -7,6 +7,6 @@ import java.util.List;
 import java.util.Optional;
 
 public interface HypeScoreRepository extends JpaRepository<HypeScore, Long> {
-    List<HypeScore> findByTickerOrderByCreatedAtDesc(Ticker ticker);
+    List<HypeScore> findTop2ByTickerOrderByCreatedAtDesc(Ticker ticker);
     Optional<HypeScore> findTopByTickerOrderByCreatedAtDesc(Ticker ticker);
 }
