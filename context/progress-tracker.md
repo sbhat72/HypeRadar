@@ -91,7 +91,7 @@ This file tracks what has been built, what is in progress, known issues encounte
 ### Libs
 - `src/lib/mock-tickers.ts` — shared `MOCK_TICKERS` array (18 tickers) used by the watchlist page as fallback price/change/mention/hypeScore data for tickers not in the trending API response
 - `src/lib/api.ts` — `apiGet`/`apiPost` helpers for internal Next.js routes; `apiFetch` Server Component helper that attaches the Clerk JWT (`Authorization: Bearer`) to every request to the Spring Boot backend (`NEXT_PUBLIC_API_URL`). Throws at module init if `NEXT_PUBLIC_API_URL` is unset. Uses `new Headers(options?.headers)` to safely merge caller headers before setting defaults.
-- `src/lib/api-client.ts` — client-side `useApiClient()` hook. Uses `useAuth().getToken()` from Clerk to attach Bearer token to all Spring Boot API calls. Returns `{ apiCall(path, options?) }`. Returns null for 204/empty responses. Used by all four protected pages (dashboard, deep dive, alerts, watchlist).
+- `src/lib/useApiClient.ts` — client-side `useApiClient()` hook. Uses `useAuth().getToken()` from Clerk to attach Bearer token to all Spring Boot API calls. Returns `{ apiCall(path, options?) }`. Returns null for 204/empty responses. Used by all four protected pages (dashboard, deep dive, alerts, watchlist).
 
 ### API Routes
 - `/api/yahoo-finance` — Next.js App Router GET route that proxies Yahoo Finance v8 chart API. Accepts `ticker`, `interval`, `range` query params. Returns raw Yahoo Finance JSON. Avoids browser CORS restrictions.
@@ -129,6 +129,7 @@ This file tracks what has been built, what is in progress, known issues encounte
 | 11 | `AbortError: signal is aborted without reason` surfaced as a Runtime error in the dev overlay on the deep dive page | Resolved | Two-part fix: (1) replaced `err instanceof Error && err.name === 'AbortError'` with `signal.aborted` — the definitive check that works regardless of whether the runtime throws a `DOMException` or `Error`; (2) added `.catch(() => {})` on the `loadChart(...)` call in the useEffect so any rejection that escapes the internal catch block never becomes an unhandled Promise rejection |
 | 12 | React hydration mismatch on `<body>` — Grammarly browser extension injects `data-new-gr-c-s-check-loaded` and `data-gr-ext-installed` attributes into the DOM before React hydrates, causing a server/client attribute diff | Resolved | Added `suppressHydrationWarning` to `<body>` in `src/app/layout.tsx`. This tells React to skip attribute-level comparison on the body element without suppressing child hydration errors |
 | 13 | `frontend/.env.local` was committed to git (no root `.gitignore` existed), exposing `CLERK_SECRET_KEY` in history | Resolved | Replaced real key with placeholder in the file. **Action required: rotate the Clerk secret key at dashboard.clerk.com immediately.** Add `frontend/.env.local` to a root `.gitignore` before next commit. |
+| 14 | Backend fails to start: `Could not resolve placeholder 'CLERK_JWKS_URI'` — env var not set and no `.env` file present | Resolved | Added `${CLERK_JWKS_URI:https://coherent-doberman-64.clerk.accounts.dev/.well-known/jwks.json}` default in `application.properties` (JWKS URI is a public endpoint, not a secret). Also added `spring.config.import=optional:file:.env[.properties]` and `backend/.env.example` template for local dev. |
 
 ---
 
