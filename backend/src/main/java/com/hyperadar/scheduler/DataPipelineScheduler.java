@@ -1,8 +1,8 @@
 package com.hyperadar.scheduler;
 
 import com.hyperadar.controller.LiveWebSocketController;
-import com.hyperadar.service.ingestion.RedditPollerService;
 import com.hyperadar.service.ingestion.RssFeedParserService;
+import com.hyperadar.service.ingestion.StockTwitsService;
 import com.hyperadar.service.processing.BullishBearishClassifierService;
 import com.hyperadar.service.processing.HypeScoreEngineService;
 import lombok.AllArgsConstructor;
@@ -17,8 +17,8 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class DataPipelineScheduler {
 
-    private final RedditPollerService redditPollerService;
     private final RssFeedParserService rssFeedParserService;
+    private final StockTwitsService stockTwitsService;
     private final HypeScoreEngineService hypeScoreEngineService;
     private final BullishBearishClassifierService bullishBearishClassifierService;
     private final LiveWebSocketController liveWebSocketController;
@@ -28,15 +28,15 @@ public class DataPipelineScheduler {
         log.info("Pipeline cycle started at {}", LocalDateTime.now());
 
         try {
-            redditPollerService.poll();
+            rssFeedParserService.parse();
         } catch (Exception e) {
-            log.error("Reddit polling failed: {}", e.getMessage(), e);
+            log.error("RSS feed parsing failed: {}", e.getMessage());
         }
 
         try {
-            rssFeedParserService.parse();
+            stockTwitsService.poll();
         } catch (Exception e) {
-            log.error("RSS feed parsing failed: {}", e.getMessage(), e);
+            log.error("StockTwits polling failed: {}", e.getMessage());
         }
 
         try {
@@ -44,7 +44,7 @@ public class DataPipelineScheduler {
             bullishBearishClassifierService.classifyAll();
             liveWebSocketController.broadcastUpdate();
         } catch (Exception e) {
-            log.error("Processing or broadcast failed: {}", e.getMessage(), e);
+            log.error("Processing pipeline failed: {}", e.getMessage());
         }
 
         log.info("Pipeline cycle completed at {}", LocalDateTime.now());

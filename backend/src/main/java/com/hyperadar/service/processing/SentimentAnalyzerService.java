@@ -23,14 +23,14 @@ public class SentimentAnalyzerService {
     private final TickerRepository tickerRepository;
 
     private static final Set<SentimentEvent.Source> NEWS_SOURCES = EnumSet.of(
-            SentimentEvent.Source.REUTERS,
+            SentimentEvent.Source.YAHOO_FINANCE,
             SentimentEvent.Source.CNBC,
             SentimentEvent.Source.MARKETWATCH,
             SentimentEvent.Source.NASDAQ
     );
 
-    public Map<Ticker, Double> computeRedditScores() {
-        return computeScores(EnumSet.of(SentimentEvent.Source.REDDIT));
+    public Map<Ticker, Double> computeStockTwitsScores() {
+        return computeScores(EnumSet.of(SentimentEvent.Source.STOCKTWITS));
     }
 
     public Map<Ticker, Double> computeNewsScores() {
