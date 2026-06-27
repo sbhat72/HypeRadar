@@ -4,11 +4,11 @@ import Link from 'next/link'
 
 export interface TickerData {
   symbol: string
-  price?: number
-  change: number
-  changePercent: number
+  price?: number | null
+  change: number | null
+  changePercent: number | null
   mentions: number
-  hypeScore: number
+  hypeScore: number | null
 }
 
 export interface FlashEntry {
@@ -31,7 +31,7 @@ function getHeatColor(intensity: number): string {
 }
 
 export default function TrendingTickerCard({ ticker, flash, maxMentions }: Props) {
-  const isPositive = ticker.change >= 0
+  const isPositive = (ticker.change ?? 0) >= 0
   const intensity = ticker.mentions / maxMentions
   const activeBars = Math.max(1, Math.ceil(intensity * 5))
   const heatColor = getHeatColor(intensity)
@@ -46,7 +46,7 @@ export default function TrendingTickerCard({ ticker, flash, maxMentions }: Props
             {ticker.symbol}
           </span>
           <span className="text-xs font-mono bg-elevated border border-default px-2 py-0.5 rounded-lg">
-            <span className="text-secondary">{ticker.hypeScore}</span>
+            <span className="text-secondary">{ticker.hypeScore ?? '--'}</span>
             <span className="text-faint">/100</span>
           </span>
         </div>
@@ -62,15 +62,15 @@ export default function TrendingTickerCard({ ticker, flash, maxMentions }: Props
             />
           )}
           <span className="relative text-2xl font-bold font-mono text-primary">
-            {ticker.price !== undefined ? `$${ticker.price.toFixed(2)}` : '—'}
+            {ticker.price != null ? `$${ticker.price.toFixed(2)}` : '--'}
           </span>
         </div>
 
         {/* Change */}
         <div className={`text-sm font-mono font-semibold mb-3 ${isPositive ? 'text-hype-green' : 'text-hype-red'}`}>
-          {isPositive ? '+' : ''}{ticker.change.toFixed(2)}{' '}
+          {isPositive ? '+' : ''}{ticker.change?.toFixed(2) ?? '--'}{' '}
           <span className="text-xs opacity-80">
-            ({isPositive ? '+' : ''}{ticker.changePercent.toFixed(2)}%)
+            ({isPositive ? '+' : ''}{ticker.changePercent?.toFixed(2) ?? '--'}%)
           </span>
         </div>
 

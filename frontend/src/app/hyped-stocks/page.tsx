@@ -77,7 +77,7 @@ export default function HypedStocksPage() {
         return prev.map(ticker => {
           if (Math.random() > 0.6) return ticker
 
-          if (ticker.price === undefined) {
+          if (ticker.price == null || ticker.change == null) {
             newFlashes[ticker.symbol] = { dir: Math.random() >= 0.5 ? 'up' : 'down', ts: now }
             return ticker
           }
