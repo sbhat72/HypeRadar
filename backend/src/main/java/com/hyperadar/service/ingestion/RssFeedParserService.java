@@ -34,8 +34,8 @@ import java.util.Set;
 
 @Service
 public class RssFeedParserService {
-    @Value("${rss.feed.reuters}")
-    private String reutersFeedUrl;
+    @Value("${rss.feed.yahoofinance}")
+    private String yahooFinanceFeedUrl;
 
     @Value("${rss.feed.cnbc}")
     private String cnbcFeedUrl;
@@ -60,7 +60,7 @@ public class RssFeedParserService {
 
 
     private List<String> getFeedUrls() {
-        return List.of(reutersFeedUrl, cnbcFeedUrl, marketWatchFeedUrl, nasdaqFeedUrl);
+        return List.of(yahooFinanceFeedUrl, cnbcFeedUrl, marketWatchFeedUrl, nasdaqFeedUrl);
     }
 
     Map<String, List<String>> getHeadlines() throws IllegalArgumentException, FeedException, IOException{
@@ -149,7 +149,7 @@ public class RssFeedParserService {
         Map<String, List<String>> headlinesMap = getHeadlines();
 
         Map<String, SentimentEvent.Source> urlToSource = new HashMap<>();
-        urlToSource.put(reutersFeedUrl, SentimentEvent.Source.REUTERS);
+        urlToSource.put(yahooFinanceFeedUrl, SentimentEvent.Source.YAHOO_FINANCE);
         urlToSource.put(cnbcFeedUrl, SentimentEvent.Source.CNBC);
         urlToSource.put(marketWatchFeedUrl, SentimentEvent.Source.MARKETWATCH);
         urlToSource.put(nasdaqFeedUrl, SentimentEvent.Source.NASDAQ);
