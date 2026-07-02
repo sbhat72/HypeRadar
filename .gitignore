@@ -1,0 +1,19 @@
+# Env files — never commit secrets
+.env
+.env.local
+.env*.local
+frontend/.env.local
+backend/.env
+
+# Local Spring Boot config — contains real secrets, never commit
+**/application-local.properties
+**/application-default.properties
+
+# Java build output
+backend/target/
+
+# Node
+frontend/node_modules/
+frontend/.next/
+frontend/tsconfig.tsbuildinfo
+frontend/next-env.d.ts

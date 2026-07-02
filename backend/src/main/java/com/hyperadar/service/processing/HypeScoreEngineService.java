@@ -35,7 +35,7 @@ public class HypeScoreEngineService {
             return;
         }
 
-        Map<Ticker, Double> redditScores = sentimentAnalyzerService.computeRedditScores();
+        Map<Ticker, Double> redditScores = sentimentAnalyzerService.computeStockTwitsScores();
         Map<Ticker, Double> newsScores = sentimentAnalyzerService.computeNewsScores();
 
         Map<Ticker, AlphaVantageQuoteDto> quotes = new HashMap<>();

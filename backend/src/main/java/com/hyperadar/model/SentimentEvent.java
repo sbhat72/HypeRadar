@@ -40,11 +40,7 @@ public class SentimentEvent {
     private LocalDateTime createdAt;
 
     public enum Source {
-        REDDIT,
-        REUTERS,
-        CNBC,
-        MARKETWATCH,
-        NASDAQ
+        STOCKTWITS, YAHOO_FINANCE, CNBC, MARKETWATCH, NASDAQ, REUTERS
     }
 
     public enum Polarity {

@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useUser } from '@clerk/nextjs'
 import PriceChart, { type ChartPoint } from '@/components/ticker/PriceChart'
-import { isWatchlisted, addToWatchlist, removeFromWatchlist } from '@/lib/watchlist'
+import { useApiClient } from '@/lib/useApiClient'
 
 const TIME_RANGES = [
   { label: '1D', interval: '5m',  range: '1d'  },
@@ -24,21 +24,33 @@ interface StockMeta {
   regularMarketVolume: number
 }
 
-const MOCK_SIGNALS = [
-  { name: 'Reddit Velocity',   score: 78 },
-  { name: 'News Sentiment',    score: 65 },
-  { name: 'Volume Spike',      score: 82 },
-  { name: '52-Week Position',  score: 54 },
-]
+interface HypeBreakdownDto {
+  symbol: string
+  currentScore: number
+  redditScore: number
+  newsScore: number
+  volumeScore: number
+  priceScore: number
+  verdict: string
+  currentPrice: number
+  priceChange: number
+  changePercent: number
+  scoreHistory: { timestamp: string; score: number }[]
+  sources: { source: string; content: string; polarity: string }[]
+}
 
-const MOCK_SOURCES = [
-  { source: 'REDDIT',      headline: 'Short interest at 30% — this is just like 2021 all over again',            polarity: 'POSITIVE' },
-  { source: 'REUTERS',     headline: 'Stock surges amid unprecedented retail investor activity on social media', polarity: 'POSITIVE' },
-  { source: 'CNBC',        headline: 'Analysts warn of extreme volatility as meme stock momentum returns',       polarity: 'NEGATIVE' },
-  { source: 'MARKETWATCH', headline: 'Options market signals unusual call volume spike ahead of earnings',       polarity: 'NEUTRAL'  },
-  { source: 'NASDAQ',      headline: 'Short sellers face mounting pressure as shares climb double digits',       polarity: 'POSITIVE' },
-  { source: 'REDDIT',      headline: 'Fundamentals don\'t matter when the squeeze is on — diamond hands only',  polarity: 'POSITIVE' },
-]
+interface WatchlistItemDto {
+  id: number
+  tickerSymbol: string
+  addedAt: string
+}
+
+const VERDICT_MAP: Record<string, { label: string; color: string }> = {
+  HYPE_CONFIRMED:       { label: 'Hype Confirmed',       color: '#62C073' },
+  PURE_HYPE:            { label: 'Pure Hype',            color: '#FF990A' },
+  HIDDEN_MOMENTUM:      { label: 'Hidden Momentum',      color: '#52A8FF' },
+  BEARISH_CONFIRMATION: { label: 'Bearish Confirmation', color: '#FF6166' },
+}
 
 const SOURCE_COLORS: Record<string, string> = {
   REDDIT:      '#FF4500',
@@ -69,18 +81,20 @@ export default function TickerDeepDivePage() {
   const params = useParams()
   const ticker = (params.ticker as string)?.toUpperCase() ?? ''
   const { user, isLoaded } = useUser()
+  const { apiCall } = useApiClient()
 
   const [activeRange, setActiveRange] = useState<RangeLabel>('1D')
   const [chartData,   setChartData]   = useState<ChartPoint[]>([])
   const [meta,        setMeta]        = useState<StockMeta | null>(null)
   const [loading,     setLoading]     = useState(true)
   const [chartError,  setChartError]  = useState<string | null>(null)
-  const [watchlisted, setWatchlisted] = useState(false)
 
-  useEffect(() => {
-    if (!isLoaded || !user?.id || !ticker) return
-    setWatchlisted(isWatchlisted(user.id, ticker))
-  }, [isLoaded, user?.id, ticker])
+  const [hypeData,    setHypeData]    = useState<HypeBreakdownDto | null>(null)
+  const [hypeLoading, setHypeLoading] = useState(true)
+  const [hypeError,   setHypeError]   = useState<string | null>(null)
+
+  const [watchlisted,     setWatchlisted]     = useState(false)
+  const [watchlistLoading, setWatchlistLoading] = useState(false)
 
   useEffect(() => {
     if (!ticker) return
@@ -90,14 +104,64 @@ export default function TickerDeepDivePage() {
     return () => controller.abort()
   }, [ticker, activeRange])
 
-  function handleWatchlistToggle() {
-    if (!user?.id) return
-    if (watchlisted) {
-      removeFromWatchlist(user.id, ticker)
-      setWatchlisted(false)
-    } else {
-      addToWatchlist(user.id, ticker)
-      setWatchlisted(true)
+  useEffect(() => {
+    if (!isLoaded || !ticker) return
+    let active = true
+
+    setHypeLoading(true)
+    setHypeError(null)
+
+    apiCall(`/api/hype/${ticker}`)
+      .then((data: HypeBreakdownDto) => { if (active) setHypeData(data) })
+      .catch((err: unknown) => {
+        if (!active) return
+        if (err instanceof Error && err.message.includes('404')) setHypeError('not_found')
+        else setHypeError('failed')
+      })
+      .finally(() => { if (active) setHypeLoading(false) })
+
+    apiCall('/api/watchlist')
+      .then((items: WatchlistItemDto[]) => {
+        if (active) setWatchlisted(items.some(item => item.tickerSymbol === ticker))
+      })
+      .catch(() => {})
+
+    return () => { active = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded, ticker])
+
+  async function fetchHypeData() {
+    setHypeLoading(true)
+    setHypeError(null)
+    try {
+      const data: HypeBreakdownDto = await apiCall(`/api/hype/${ticker}`)
+      setHypeData(data)
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('404')) {
+        setHypeError('not_found')
+      } else {
+        setHypeError('failed')
+      }
+    } finally {
+      setHypeLoading(false)
+    }
+  }
+
+  async function handleWatchlistToggle() {
+    if (!user?.id || watchlistLoading) return
+    setWatchlistLoading(true)
+    try {
+      if (watchlisted) {
+        await apiCall(`/api/watchlist/${ticker}`, { method: 'DELETE' })
+        setWatchlisted(false)
+      } else {
+        await apiCall(`/api/watchlist/${ticker}`, { method: 'POST' })
+        setWatchlisted(true)
+      }
+    } catch {
+      // keep current state on error
+    } finally {
+      setWatchlistLoading(false)
     }
   }
 
@@ -139,7 +203,14 @@ export default function TickerDeepDivePage() {
     }
   }
 
-  const overallScore = 74
+  const signals = hypeData ? [
+    { name: 'Reddit Velocity',  score: hypeData.redditScore },
+    { name: 'News Sentiment',   score: hypeData.newsScore   },
+    { name: 'Volume Spike',     score: hypeData.volumeScore },
+    { name: '52-Week Position', score: hypeData.priceScore  },
+  ] : []
+
+  const verdict = hypeData ? (VERDICT_MAP[hypeData.verdict] ?? { label: hypeData.verdict, color: 'var(--text-secondary)' }) : null
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--bg-base)' }}>
@@ -165,7 +236,8 @@ export default function TickerDeepDivePage() {
           </div>
           <button
             onClick={handleWatchlistToggle}
-            className="flex-shrink-0 px-4 py-2 rounded-lg font-mono text-sm font-bold border transition-all duration-200"
+            disabled={watchlistLoading}
+            className="flex-shrink-0 px-4 py-2 rounded-lg font-mono text-sm font-bold border transition-all duration-200 disabled:opacity-60"
             style={watchlisted
               ? { backgroundColor: 'var(--hype-green-bg)', borderColor: 'var(--hype-green)', color: 'var(--hype-green)' }
               : { backgroundColor: 'transparent', borderColor: 'var(--border-default)', color: 'var(--text-muted)' }
@@ -235,119 +307,175 @@ export default function TickerDeepDivePage() {
             </span>
           </div>
 
-          <div className="flex items-center gap-6 mb-6">
-            <div className="text-7xl font-black font-mono leading-none" style={{ color: scoreColor(overallScore) }}>
-              {overallScore}
-            </div>
-            <div>
-              <div className="text-sm font-mono font-bold" style={{ color: 'var(--text-secondary)' }}>
-                Overall Hype Score
-              </div>
-              <div className="text-xs font-mono" style={{ color: 'var(--text-faint)' }}>out of 100</div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {MOCK_SIGNALS.map(sig => {
-              const color = scoreColor(sig.score)
-              return (
+          {hypeLoading ? (
+            <div className="flex flex-col gap-3">
+              {[1, 2, 3].map(i => (
                 <div
-                  key={sig.name}
-                  className="rounded-xl p-4"
-                  style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)' }}
+                  key={i}
+                  className="h-16 rounded-xl animate-pulse"
+                  style={{ backgroundColor: 'var(--bg-elevated)' }}
+                />
+              ))}
+            </div>
+          ) : hypeError === 'not_found' ? (
+            <div
+              className="rounded-xl p-6 text-center"
+              style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)' }}
+            >
+              <p className="font-mono text-sm" style={{ color: 'var(--text-muted)' }}>
+                No hype data found for {ticker} yet. Check back after the next pipeline cycle.
+              </p>
+            </div>
+          ) : hypeError === 'failed' ? (
+            <div className="text-center py-6">
+              <p className="font-mono text-sm mb-3" style={{ color: 'var(--text-muted)' }}>
+                Could not load hype data.
+              </p>
+              <button
+                onClick={fetchHypeData}
+                className="px-4 py-2 rounded-xl font-mono text-sm font-bold transition-all"
+                style={{
+                  backgroundColor: 'var(--bg-surface)',
+                  border: '1px solid var(--border-default)',
+                  color: 'var(--text-secondary)',
+                }}
+              >
+                Retry
+              </button>
+            </div>
+          ) : hypeData ? (
+            <>
+              <div className="flex items-center gap-6 mb-6">
+                <div
+                  className="text-7xl font-black font-mono leading-none"
+                  style={{ color: scoreColor(hypeData.currentScore) }}
                 >
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs font-mono" style={{ color: 'var(--text-secondary)' }}>
-                      {sig.name}
-                    </span>
-                    <span className="text-sm font-mono font-bold" style={{ color }}>
-                      {sig.score}/100
-                    </span>
-                  </div>
-                  <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-elevated)' }}>
-                    <div
-                      className="h-full rounded-full transition-all duration-700"
-                      style={{ width: `${sig.score}%`, backgroundColor: color }}
-                    />
-                  </div>
+                  {hypeData.currentScore}
                 </div>
-              )
-            })}
-          </div>
+                <div>
+                  <div className="text-sm font-mono font-bold" style={{ color: 'var(--text-secondary)' }}>
+                    Overall Hype Score
+                  </div>
+                  <div className="text-xs font-mono" style={{ color: 'var(--text-faint)' }}>out of 100</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {signals.map(sig => {
+                  const color = scoreColor(sig.score)
+                  return (
+                    <div
+                      key={sig.name}
+                      className="rounded-xl p-4"
+                      style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)' }}
+                    >
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-xs font-mono" style={{ color: 'var(--text-secondary)' }}>
+                          {sig.name}
+                        </span>
+                        <span className="text-sm font-mono font-bold" style={{ color }}>
+                          {sig.score}/100
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-elevated)' }}>
+                        <div
+                          className="h-full rounded-full transition-all duration-700"
+                          style={{ width: `${sig.score}%`, backgroundColor: color }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          ) : null}
         </section>
 
         {/* ── Verdict ── */}
-        <section className="mb-8">
-          <div className="pb-2 mb-4" style={{ borderBottom: '1px solid var(--border-default)' }}>
-            <span className="text-xs font-mono tracking-widest uppercase" style={{ color: 'var(--text-secondary)' }}>
-              Verdict
-            </span>
-          </div>
-          <div
-            className="rounded-xl p-6"
-            style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)' }}
-          >
-            <div className="text-3xl font-black font-mono mb-2" style={{ color: '#FF990A' }}>
-              Pure Hype
+        {hypeData && verdict && (
+          <section className="mb-8">
+            <div className="pb-2 mb-4" style={{ borderBottom: '1px solid var(--border-default)' }}>
+              <span className="text-xs font-mono tracking-widest uppercase" style={{ color: 'var(--text-secondary)' }}>
+                Verdict
+              </span>
             </div>
-            <p className="text-sm font-mono" style={{ color: 'var(--text-muted)' }}>
-              Social noise not yet reflected in price action. Monitor for a confirming catalyst before entry.
-            </p>
-          </div>
-        </section>
+            <div
+              className="rounded-xl p-6"
+              style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)' }}
+            >
+              <div className="text-3xl font-black font-mono mb-2" style={{ color: verdict.color }}>
+                {verdict.label}
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* ── Source Evidence ── */}
-        <section className="mb-8">
-          <div className="pb-2 mb-4" style={{ borderBottom: '1px solid var(--border-default)' }}>
-            <span className="text-xs font-mono tracking-widest uppercase" style={{ color: 'var(--text-secondary)' }}>
-              Sources
-            </span>
-          </div>
-          <div className="flex flex-col gap-3">
-            {MOCK_SOURCES.map((src, i) => (
-              <button
-                key={i}
-                type="button"
-                className="block w-full text-left rounded-xl p-4 transition-colors"
+        {!hypeLoading && !hypeError && (
+          <section className="mb-8">
+            <div className="pb-2 mb-4" style={{ borderBottom: '1px solid var(--border-default)' }}>
+              <span className="text-xs font-mono tracking-widest uppercase" style={{ color: 'var(--text-secondary)' }}>
+                Sources
+              </span>
+            </div>
+
+            {hypeData && hypeData.sources.length === 0 ? (
+              <div
+                className="rounded-xl p-6 text-center"
                 style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)' }}
-                onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--border-subtle)')}
-                onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border-default)')}
               >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <span
-                      className="flex-shrink-0 text-xs font-mono font-bold px-2 py-0.5 rounded"
-                      style={{
-                        backgroundColor: `${SOURCE_COLORS[src.source]}22`,
-                        color: SOURCE_COLORS[src.source],
-                      }}
-                    >
-                      {src.source}
-                    </span>
-                    <span
-                      className="text-sm font-mono truncate"
-                      style={{ color: 'var(--text-secondary)' }}
-                    >
-                      {src.headline}
-                    </span>
-                  </div>
-                  <span
-                    className="flex-shrink-0 text-xs font-mono font-bold px-2 py-0.5 rounded"
-                    style={
-                      src.polarity === 'POSITIVE'
-                        ? { backgroundColor: 'var(--hype-green-bg)', color: 'var(--hype-green)' }
-                        : src.polarity === 'NEGATIVE'
-                        ? { backgroundColor: 'var(--hype-red-bg)', color: 'var(--hype-red)' }
-                        : { backgroundColor: 'var(--bg-subtle)', color: 'var(--text-muted)' }
-                    }
+                <p className="font-mono text-sm" style={{ color: 'var(--text-muted)' }}>
+                  No sources found for this ticker in the last 24 hours.
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {(hypeData?.sources ?? []).map((src, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    className="block w-full text-left rounded-xl p-4 transition-colors"
+                    style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)' }}
+                    onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--border-subtle)')}
+                    onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border-default)')}
                   >
-                    {src.polarity}
-                  </span>
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <span
+                          className="flex-shrink-0 text-xs font-mono font-bold px-2 py-0.5 rounded"
+                          style={{
+                            backgroundColor: `${SOURCE_COLORS[src.source] ?? '#888'}22`,
+                            color: SOURCE_COLORS[src.source] ?? '#888',
+                          }}
+                        >
+                          {src.source}
+                        </span>
+                        <span
+                          className="text-sm font-mono truncate"
+                          style={{ color: 'var(--text-secondary)' }}
+                        >
+                          {src.content}
+                        </span>
+                      </div>
+                      <span
+                        className="flex-shrink-0 text-xs font-mono font-bold px-2 py-0.5 rounded"
+                        style={
+                          src.polarity === 'POSITIVE'
+                            ? { backgroundColor: 'var(--hype-green-bg)', color: 'var(--hype-green)' }
+                            : src.polarity === 'NEGATIVE'
+                            ? { backgroundColor: 'var(--hype-red-bg)', color: 'var(--hype-red)' }
+                            : { backgroundColor: 'var(--bg-subtle)', color: 'var(--text-muted)' }
+                        }
+                      >
+                        {src.polarity}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
 
       </div>
     </div>
