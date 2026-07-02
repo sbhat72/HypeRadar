@@ -8,9 +8,25 @@ import { useApiClient } from '@/lib/useApiClient'
 interface TrendingTickerDto {
   symbol: string
   score: number
-  priceChange: number
-  changePercent: number
   mentionCount: number
+}
+
+async function fetchYahooPrice(symbol: string): Promise<{ price: number | null; change: number | null; changePercent: number | null }> {
+  try {
+    const res = await fetch(`/api/yahoo-finance?ticker=${encodeURIComponent(symbol)}&interval=1d&range=1d`)
+    if (!res.ok) return { price: null, change: null, changePercent: null }
+    const data = await res.json()
+    const meta = data?.chart?.result?.[0]?.meta
+    if (!meta) return { price: null, change: null, changePercent: null }
+    const price: number | null = meta.regularMarketPrice ?? null
+    const prevClose: number | null = meta.chartPreviousClose ?? null
+    if (price == null || prevClose == null || prevClose === 0) return { price, change: null, changePercent: null }
+    const change = price - prevClose
+    const changePercent = (change / prevClose) * 100
+    return { price, change, changePercent }
+  } catch {
+    return { price: null, change: null, changePercent: null }
+  }
 }
 
 const TIME_TABS = ['1H', '1D', '1W', '1M'] as const
@@ -30,7 +46,7 @@ function SkeletonCard() {
 }
 
 export default function HypedStocksPage() {
-  const { isLoaded } = useAuth()
+  const { isLoaded, isSignedIn } = useAuth()
   const { apiCall } = useApiClient()
 
   const [tickers, setTickers] = useState<TickerData[]>([])
@@ -47,13 +63,16 @@ export default function HypedStocksPage() {
     setError(null)
     try {
       const data: TrendingTickerDto[] = await apiCall('/api/tickers/trending?limit=20')
-      setTickers(data.map(d => ({
+      const base = data.map(d => ({
         symbol: d.symbol,
-        change: d.priceChange,
-        changePercent: d.changePercent,
+        change: null as number | null,
+        changePercent: null as number | null,
+        price: null as number | null,
         mentions: d.mentionCount,
         hypeScore: d.score,
-      })))
+      }))
+      const prices = await Promise.all(base.map(t => fetchYahooPrice(t.symbol)))
+      setTickers(base.map((t, i) => ({ ...t, ...prices[i] })))
     } catch {
       setError('Could not load trending tickers.')
     } finally {
@@ -62,10 +81,10 @@ export default function HypedStocksPage() {
   }
 
   useEffect(() => {
-    if (!isLoaded) return
+    if (!isLoaded || !isSignedIn) return
     fetchTickers()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoaded])
+  }, [isLoaded, isSignedIn])
 
   useEffect(() => {
     const interval = setInterval(() => {
