@@ -62,6 +62,6 @@ public class SentimentAnalyzerService {
         long positive = events.stream().filter(e -> e.getPolarity() == SentimentEvent.Polarity.POSITIVE).count();
         long negative = events.stream().filter(e -> e.getPolarity() == SentimentEvent.Polarity.NEGATIVE).count();
         double rawScore = (double) (positive - negative) / events.size();
-        return ((rawScore + 1) / 2) * 100;
+        return Math.round(((rawScore + 1) / 2) * 10000.0) / 100.0; // Normalize to 0-100 scale
     }
 }

@@ -5,6 +5,10 @@
 frontend/.env.local
 backend/.env
 
+# Local Spring Boot config — contains real secrets, never commit
+**/application-local.properties
+**/application-default.properties
+
 # Java build output
 backend/target/
 

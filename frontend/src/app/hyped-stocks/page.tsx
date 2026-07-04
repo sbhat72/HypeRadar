@@ -8,9 +8,10 @@ import { useApiClient } from '@/lib/useApiClient'
 interface TrendingTickerDto {
   symbol: string
   score: number
-  priceChange: number
-  changePercent: number
   mentionCount: number
+  price: number | null
+  priceChange: number | null
+  changePercent: number | null
 }
 
 const TIME_TABS = ['1H', '1D', '1W', '1M'] as const
@@ -30,7 +31,7 @@ function SkeletonCard() {
 }
 
 export default function HypedStocksPage() {
-  const { isLoaded } = useAuth()
+  const { isLoaded, isSignedIn } = useAuth()
   const { apiCall } = useApiClient()
 
   const [tickers, setTickers] = useState<TickerData[]>([])
@@ -49,8 +50,9 @@ export default function HypedStocksPage() {
       const data: TrendingTickerDto[] = await apiCall('/api/tickers/trending?limit=20')
       setTickers(data.map(d => ({
         symbol: d.symbol,
-        change: d.priceChange,
-        changePercent: d.changePercent,
+        price: d.price ?? null,
+        change: d.priceChange ?? null,
+        changePercent: d.changePercent ?? null,
         mentions: d.mentionCount,
         hypeScore: d.score,
       })))
@@ -62,10 +64,10 @@ export default function HypedStocksPage() {
   }
 
   useEffect(() => {
-    if (!isLoaded) return
+    if (!isLoaded || !isSignedIn) return
     fetchTickers()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoaded])
+  }, [isLoaded, isSignedIn])
 
   useEffect(() => {
     const interval = setInterval(() => {
