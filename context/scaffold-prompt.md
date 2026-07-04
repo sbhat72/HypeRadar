@@ -357,9 +357,8 @@ public class Alert {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+    @Column(name = "clerk_user_id", nullable = false)
+    private String clerkUserId;
 
     @ManyToOne
     @JoinColumn(name = "ticker_id", nullable = false)
@@ -731,11 +730,11 @@ Create each as a plain `@Data @Builder @NoArgsConstructor @AllArgsConstructor` c
 ### Frontend pages — create as empty stubs with a single placeholder div
 
 - `src/app/layout.tsx` — root layout with `<html>` and `<body>`
-- `src/app/page.tsx` — redirects to `/dashboard`
-- `src/app/(auth)/login/page.tsx`
-- `src/app/(auth)/register/page.tsx`
-- `src/app/dashboard/page.tsx`
-- `src/app/ticker/[symbol]/page.tsx`
+- `src/app/page.tsx` — redirects to `/hyped-stocks`
+- `src/app/(auth)/sign-in/page.tsx`
+- `src/app/(auth)/sign-up/page.tsx`
+- `src/app/hyped-stocks/page.tsx`
+- `src/app/hyped-stocks/[ticker]/page.tsx`
 - `src/app/alerts/page.tsx`
 - `src/app/history/page.tsx`
 

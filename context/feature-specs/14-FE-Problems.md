@@ -6,14 +6,14 @@ Read `AGENTS.md` before starting.
 
 `TrendingTickerCard` crashes with `Cannot read properties of null
 (reading 'toFixed')` when the API returns tickers that have null
-price data. This happens because Alpha Vantage's free tier (25
-requests/day) cannot fetch a live quote for every ticker in the
-database, so `price`, `priceChange`, and `changePercent` arrive as
-null from the backend.
+price data. This happens because Yahoo Finance may not return a valid
+quote for every ticker (e.g. new listings, delisted symbols, or
+transient failures), so `price`, `priceChange`, and `changePercent`
+arrive as null from the backend.
 
 ## What To Fix
 
-In `src/components/ui/TrendingTickerCard.tsx`, find every call to
+In `src/components/dashboard/TrendingTickerCard.tsx`, find every call to
 `.toFixed()` and wrap it with a null guard using optional chaining
 and nullish coalescing. Also guard any other numeric operations
 (comparisons, arithmetic) on these fields.

@@ -2,8 +2,8 @@
 
 ## What This Project Is
 A stock market social sentiment analysis platform. Tracks social media hype around stocks
-and ETFs by polling Reddit and financial news RSS feeds, combines social signal with real
-market data from Finnhub, and produces a hype score, sentiment analysis, bullish/bearish
+and ETFs by polling StockTwits and financial news RSS feeds, combines social signal with real
+market data from Yahoo Finance, and produces a hype score, sentiment analysis, bullish/bearish
 verdict, and real-time alert system for everyday investors.
 
 ## Core Features

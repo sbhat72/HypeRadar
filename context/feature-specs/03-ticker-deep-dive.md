@@ -22,7 +22,7 @@ The backend is not connected yet. Use mock/placeholder data for hype scores, ver
 | 1M | 1d | 1mo |
 | 1Y | 1wk | 1y |
 
-- API URL: `https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval={interval}&range={range}`
+- API URL: call the Next.js proxy at `/api/yahoo-finance?ticker={ticker}&interval={interval}&range={range}` — do not call Yahoo Finance directly from the browser
 - Extract timestamps and closing prices from `chart.result[0].timestamp` and `chart.result[0].indicators.quote[0].close`
 - All price figures displayed in USD with the `$` symbol
 - When the user switches time range tabs, reload the chart with the new interval and range
@@ -66,7 +66,7 @@ Use **Pure Hype** as the mock verdict. Display the verdict label large and bold 
 
 Display a list of 5–6 mock source cards below the verdict. Each card shows:
 
-- Source label (REDDIT, REUTERS, CNBC, MARKETWATCH, or NASDAQ) as a colored badge
+- Source label (STOCKTWITS, YAHOO_FINANCE, CNBC, MARKETWATCH, or NASDAQ) as a colored badge
 - Headline or post title as the main text
 - A clickable link that opens the source in a new tab (use `#` as placeholder href for now)
 - Polarity badge — POSITIVE in green, NEGATIVE in red, NEUTRAL in grey

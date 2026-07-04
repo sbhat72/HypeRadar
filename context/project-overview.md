@@ -66,10 +66,9 @@ HypeRadar is a web application that surfaces social momentum behind stocks and E
 - Annotated chart with event markers
 
 ### Data Sources
-- Reddit public JSON endpoints — wallstreetbets, stocks, investing (no credentials required)
-- Financial news RSS feeds — Reuters, CNBC, MarketWatch, Nasdaq (free, no auth)
-- StockTwits public API — finance-specific social signal, free with signup, no approval needed
-- Alpha Vantage — market data, price, volume, 52-week range (free tier, instant signup)
+- StockTwits public API — finance-specific social signal (bullish/bearish sentiment), free, no approval needed
+- Financial news RSS feeds — Yahoo Finance, CNBC, MarketWatch, Nasdaq (free, no auth)
+- Yahoo Finance v8 chart API — market data: price, volume, 52-week range (proxied via Next.js route to avoid CORS/TLS fingerprinting)
 
 ---
 

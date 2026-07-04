@@ -16,6 +16,7 @@ public class TrendingTickerDto {
     private Double redditScore;
     private Double newsScore;
     private Double volumeScore;
+    private Double price;
     private Double priceScore;
     private HypeScore.Verdict verdict;
     private Double priceChange;

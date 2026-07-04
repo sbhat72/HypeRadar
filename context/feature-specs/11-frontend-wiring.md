@@ -27,12 +27,17 @@ export function useApiClient() {
       ...options,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        // Omit Authorization when getToken() returns null (unauthenticated context)
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         ...options?.headers,
       },
     })
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`)
+    }
+    // Return null for 204 No Content or empty body (e.g. DELETE responses)
+    if (response.status === 204 || response.headers.get('content-length') === '0') {
+      return null
     }
     return response.json()
   }, [getToken])
@@ -77,7 +82,7 @@ interface TrendingTicker {
   - `score` → `hypeScore`
   - `priceChange` → `change`
   - `mentionCount` → `mentions`
-  - `currentPrice` — not in `TrendingTickerDto` yet; use `priceChange` as a visual indicator for now
+  - `price` → `price` (current market price from the backend; `TrendingTickerDto` includes this field)
 - Keep the `setInterval` price simulation running on top of the fetched data — it nudges prices for the flash animation. Re-seed it with real prices when the API responds
 - Keep the time period filter tabs (1H/1D/1W/1M) — they currently only change visual state. Leave them as-is for now; filtering by time period requires a backend change that comes later
 
