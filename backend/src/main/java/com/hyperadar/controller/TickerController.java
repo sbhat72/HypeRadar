@@ -1,5 +1,6 @@
 package com.hyperadar.controller;
 
+import com.hyperadar.dto.TimePeriod;
 import com.hyperadar.dto.TrendingTickerDto;
 import com.hyperadar.model.HypeScore;
 import com.hyperadar.service.HypeDataService;
@@ -16,6 +17,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -46,35 +48,56 @@ public class TickerController {
 
     @GetMapping("/trending")
     public ResponseEntity<List<TrendingTickerDto>> getTrending(
-            @RequestParam(defaultValue = "10") int limit) {
+            @RequestParam(defaultValue = "10") int limit,
+            @RequestParam(required = false) String period) {
         int effectiveLimit = Math.min(limit, MAX_LIMIT);
-        Set<String> symbols = redisCacheService.getTopTickers(effectiveLimit);
 
-        List<TrendingTickerDto> trending = symbols.stream()
-                .map(symbol -> {
-                    HypeScore score = hypeDataService.getLatestScore(symbol).orElse(null);
-                    YahooPrice quote = fetchYahooPrice(symbol);
-                    int mentionCount = hypeDataService.getMentionCount(symbol);
+        if (period == null || period.isBlank()) {
+            return ResponseEntity.ok(getTrendingByScore(effectiveLimit));
+        }
 
-                    return TrendingTickerDto.builder()
-                            .symbol(symbol)
-                            .score(score != null ? score.getScore() : null)
-                            .redditScore(score != null ? score.getRedditScore() : null)
-                            .newsScore(score != null ? score.getNewsScore() : null)
-                            .volumeScore(score != null ? score.getVolumeScore() : null)
-                            .priceScore(score != null ? score.getFiftyTwoWeekScore() : null)
-                            .verdict(score != null ? score.getVerdict() : null)
-                            .price(quote.price())
-                            .priceChange(quote.priceChange())
-                            .changePercent(quote.changePercent())
-                            .mentionCount(mentionCount)
-                            .build();
-                })
-                .filter(dto -> dto.getScore() != null)
-                .sorted(Comparator.comparingDouble(TrendingTickerDto::getScore).reversed())
+        TimePeriod timePeriod;
+        try {
+            timePeriod = TimePeriod.fromCode(period);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        LocalDateTime since = timePeriod.cutoff(LocalDateTime.now());
+        List<TrendingTickerDto> trending = hypeDataService.getTopTickersByMentionCount(since, effectiveLimit)
+                .stream()
+                .map(r -> buildDto(r.getSymbol(), r.getMentionCount().intValue()))
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(trending);
+    }
+
+    private List<TrendingTickerDto> getTrendingByScore(int effectiveLimit) {
+        Set<String> symbols = redisCacheService.getTopTickers(effectiveLimit);
+        return symbols.stream()
+                .map(symbol -> buildDto(symbol, hypeDataService.getMentionCountHours(symbol)))
+                .filter(dto -> dto.getScore() != null)
+                .sorted(Comparator.comparingDouble(TrendingTickerDto::getScore).reversed())
+                .collect(Collectors.toList());
+    }
+
+    private TrendingTickerDto buildDto(String symbol, int mentionCount) {
+        HypeScore score = hypeDataService.getLatestScore(symbol).orElse(null);
+        YahooPrice quote = fetchYahooPrice(symbol);
+
+        return TrendingTickerDto.builder()
+                .symbol(symbol)
+                .score(score != null ? score.getScore() : null)
+                .redditScore(score != null ? score.getRedditScore() : null)
+                .newsScore(score != null ? score.getNewsScore() : null)
+                .volumeScore(score != null ? score.getVolumeScore() : null)
+                .priceScore(score != null ? score.getFiftyTwoWeekScore() : null)
+                .verdict(score != null ? score.getVerdict() : null)
+                .price(quote.price())
+                .priceChange(quote.priceChange())
+                .changePercent(quote.changePercent())
+                .mentionCount(mentionCount)
+                .build();
     }
 
     @SuppressWarnings({"unchecked", "null"})

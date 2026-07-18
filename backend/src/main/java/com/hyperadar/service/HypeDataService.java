@@ -43,12 +43,16 @@ public class HypeDataService {
                 .orElse(List.of());
     }
 
-    public int getMentionCount(String symbol) {
+    public int getMentionCountHours(String symbol) {
         return tickerRepository.findBySymbol(symbol)
                 .map(ticker -> sentimentEventRepository
                         .findByTickerAndCreatedAtAfter(ticker, LocalDateTime.now().minusHours(24))
                         .size())
                 .orElse(0);
+    }
+
+    public List<SentimentEventRepository.TickerMentionCount> getTopTickersByMentionCount(LocalDateTime since, int limit) {
+        return sentimentEventRepository.findTopTickersByMentionCountSince(since, PageRequest.of(0, limit));
     }
 
     public AlphaVantageQuoteDto fetchQuote(String symbol) {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import TrendingTickerCard, { type TickerData, type FlashEntry } from '@/components/dashboard/TrendingTickerCard'
 import { useApiClient } from '@/lib/useApiClient'
@@ -40,14 +40,17 @@ export default function HypedStocksPage() {
   const [activeTab, setActiveTab] = useState<TimeTab>('1D')
   const [flashState, setFlashState] = useState<Record<string, FlashEntry | null>>({})
   const flashTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const requestIdRef = useRef(0)
 
   const maxMentions = Math.max(...tickers.map(t => t.mentions), 1)
 
-  async function fetchTickers() {
+  const fetchTickers = useCallback(async () => {
+    const requestId = ++requestIdRef.current
     setLoading(true)
     setError(null)
     try {
-      const data: TrendingTickerDto[] = await apiCall('/api/tickers/trending?limit=20')
+      const data: TrendingTickerDto[] = await apiCall(`/api/tickers/trending?limit=20&period=${activeTab}`)
+      if (requestIdRef.current !== requestId) return
       setTickers(data.map(d => ({
         symbol: d.symbol,
         price: d.price ?? null,
@@ -57,17 +60,16 @@ export default function HypedStocksPage() {
         hypeScore: d.score,
       })))
     } catch {
-      setError('Could not load trending tickers.')
+      if (requestIdRef.current === requestId) setError('Could not load trending tickers.')
     } finally {
-      setLoading(false)
+      if (requestIdRef.current === requestId) setLoading(false)
     }
-  }
+  }, [apiCall, activeTab])
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return
     fetchTickers()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoaded, isSignedIn])
+  }, [isLoaded, isSignedIn, fetchTickers])
 
   useEffect(() => {
     const interval = setInterval(() => {
