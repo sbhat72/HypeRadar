@@ -1,10 +1,19 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useUser } from '@clerk/nextjs'
-import PriceChart, { type ChartPoint } from '@/components/ticker/PriceChart'
+import PriceChart from '@/components/ticker/PriceChart'
+import IndicatorSummaryCards, { type IndicatorCardData } from '@/components/ticker/IndicatorSummaryCards'
+import {
+  type OHLCVPoint,
+  computeIndicators,
+  interpretRSI,
+  interpretMACD,
+  interpretBollinger,
+  interpretVWAP,
+} from '@/lib/indicators'
 import { useApiClient } from '@/lib/useApiClient'
 
 const TIME_RANGES = [
@@ -84,7 +93,7 @@ export default function TickerDeepDivePage() {
   const { apiCall } = useApiClient()
 
   const [activeRange, setActiveRange] = useState<RangeLabel>('1D')
-  const [chartData,   setChartData]   = useState<ChartPoint[]>([])
+  const [ohlcvData,   setOhlcvData]   = useState<OHLCVPoint[]>([])
   const [meta,        setMeta]        = useState<StockMeta | null>(null)
   const [loading,     setLoading]     = useState(true)
   const [chartError,  setChartError]  = useState<string | null>(null)
@@ -178,14 +187,30 @@ export default function TickerDeepDivePage() {
       const result = json?.chart?.result?.[0]
       if (!result) throw new Error('No data returned')
 
-      const timestamps: number[]      = result.timestamp ?? []
-      const closes: (number | null)[] = result.indicators?.quote?.[0]?.close ?? []
+      const timestamps: number[]        = result.timestamp ?? []
+      const quote = result.indicators?.quote?.[0] ?? {}
+      const opens: (number | null)[]    = quote.open   ?? []
+      const highs: (number | null)[]    = quote.high   ?? []
+      const lows: (number | null)[]     = quote.low    ?? []
+      const closes: (number | null)[]   = quote.close  ?? []
+      const volumes: (number | null)[]  = quote.volume ?? []
 
-      const points: ChartPoint[] = timestamps
-        .map((ts, i) => ({ time: ts, value: closes[i] as number }))
-        .filter(p => p.value !== null && p.value !== undefined && !isNaN(p.value))
+      const isValid = (n: number | null | undefined): n is number =>
+        n !== null && n !== undefined && !isNaN(n)
 
-      setChartData(points)
+      const bars: OHLCVPoint[] = timestamps
+        .map((ts, i): OHLCVPoint | null => {
+          const open = opens[i]
+          const high = highs[i]
+          const low = lows[i]
+          const close = closes[i]
+          const volume = volumes[i]
+          if (!isValid(open) || !isValid(high) || !isValid(low) || !isValid(close) || !isValid(volume)) return null
+          return { time: ts, open, high, low, close, volume }
+        })
+        .filter((b): b is OHLCVPoint => b !== null)
+
+      setOhlcvData(bars)
       setMeta({
         longName:            result.meta?.longName            ?? symbol,
         regularMarketPrice:  result.meta?.regularMarketPrice  ?? 0,
@@ -196,7 +221,7 @@ export default function TickerDeepDivePage() {
       setLoading(false)
     } catch (err) {
       if (signal.aborted) return
-      setChartData([])
+      setOhlcvData([])
       setMeta(null)
       setChartError('Could not load chart data')
       setLoading(false)
@@ -211,6 +236,57 @@ export default function TickerDeepDivePage() {
   ] : []
 
   const verdict = hypeData ? (VERDICT_MAP[hypeData.verdict] ?? { label: hypeData.verdict, color: 'var(--text-secondary)' }) : null
+
+  const indicators = useMemo(() => computeIndicators(ohlcvData), [ohlcvData])
+
+  const indicatorCards = useMemo<IndicatorCardData[]>(() => {
+    if (!ohlcvData.length) return []
+    const i = ohlcvData.length - 1
+    const closeNow = ohlcvData[i].close
+    const rsiNow = indicators.rsi[i]
+    const macdNow = indicators.macd.macdLine[i]
+    const signalNow = indicators.macd.signalLine[i]
+    const bbNow = {
+      upper: indicators.bollinger.upper[i],
+      middle: indicators.bollinger.middle[i],
+      lower: indicators.bollinger.lower[i],
+    }
+    const vwapNow = indicators.vwap[i]
+
+    const rsiInterp = interpretRSI(rsiNow)
+    const macdInterp = interpretMACD(macdNow, signalNow)
+    const bbInterp = interpretBollinger(closeNow, bbNow)
+    const vwapInterp = interpretVWAP(closeNow, vwapNow)
+
+    return [
+      {
+        label: 'RSI (14)',
+        value: rsiNow !== undefined ? rsiNow.toFixed(1) : '—',
+        interpretationLabel: rsiInterp.label,
+        color: rsiInterp.color,
+      },
+      {
+        label: 'MACD',
+        value: macdInterp.label,
+        interpretationLabel: macdNow !== undefined && signalNow !== undefined
+          ? `${macdNow.toFixed(2)} vs ${signalNow.toFixed(2)}`
+          : '—',
+        color: macdInterp.color,
+      },
+      {
+        label: 'Bollinger Bands',
+        value: closeNow !== undefined ? fmtUSD(closeNow) : '—',
+        interpretationLabel: bbInterp.label,
+        color: bbInterp.color,
+      },
+      {
+        label: 'VWAP',
+        value: vwapNow !== undefined ? fmtUSD(vwapNow) : '—',
+        interpretationLabel: vwapInterp.label,
+        color: vwapInterp.color,
+      },
+    ]
+  }, [ohlcvData, indicators])
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--bg-base)' }}>
@@ -270,9 +346,29 @@ export default function TickerDeepDivePage() {
             </div>
           </div>
           <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border-default)', backgroundColor: 'var(--bg-surface)' }}>
-            <PriceChart data={chartData} loading={loading} error={chartError} />
+            <PriceChart
+              data={ohlcvData}
+              rsiData={indicators.rsi}
+              macdData={indicators.macd}
+              bollingerData={indicators.bollinger}
+              vwapData={indicators.vwap}
+              loading={loading}
+              error={chartError}
+            />
           </div>
         </section>
+
+        {/* ── Technical Indicators ── */}
+        {indicatorCards.length > 0 && (
+          <section className="mb-8">
+            <div className="pb-2 mb-4" style={{ borderBottom: '1px solid var(--border-default)' }}>
+              <span className="text-xs font-mono tracking-widest uppercase" style={{ color: 'var(--text-secondary)' }}>
+                Technical Indicators
+              </span>
+            </div>
+            <IndicatorSummaryCards cards={indicatorCards} />
+          </section>
+        )}
 
         {/* ── Financial Summary ── */}
         {meta && (
