@@ -17,3 +17,6 @@ frontend/node_modules/
 frontend/.next/
 frontend/tsconfig.tsbuildinfo
 frontend/next-env.d.ts
+
+# Throwaway local scaffolding, not part of the product
+clerk-nextjs/
