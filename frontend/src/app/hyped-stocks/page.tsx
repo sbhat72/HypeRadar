@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import TrendingTickerCard, { type TickerData, type FlashEntry } from '@/components/dashboard/TrendingTickerCard'
 import { useApiClient } from '@/lib/useApiClient'
@@ -9,24 +9,9 @@ interface TrendingTickerDto {
   symbol: string
   score: number
   mentionCount: number
-}
-
-async function fetchYahooPrice(symbol: string): Promise<{ price: number | null; change: number | null; changePercent: number | null }> {
-  try {
-    const res = await fetch(`/api/yahoo-finance?ticker=${encodeURIComponent(symbol)}&interval=1d&range=1d`)
-    if (!res.ok) return { price: null, change: null, changePercent: null }
-    const data = await res.json()
-    const meta = data?.chart?.result?.[0]?.meta
-    if (!meta) return { price: null, change: null, changePercent: null }
-    const price: number | null = meta.regularMarketPrice ?? null
-    const prevClose: number | null = meta.chartPreviousClose ?? null
-    if (price == null || prevClose == null || prevClose === 0) return { price, change: null, changePercent: null }
-    const change = price - prevClose
-    const changePercent = (change / prevClose) * 100
-    return { price, change, changePercent }
-  } catch {
-    return { price: null, change: null, changePercent: null }
-  }
+  price: number | null
+  priceChange: number | null
+  changePercent: number | null
 }
 
 const TIME_TABS = ['1H', '1D', '1W', '1M'] as const
@@ -55,36 +40,36 @@ export default function HypedStocksPage() {
   const [activeTab, setActiveTab] = useState<TimeTab>('1D')
   const [flashState, setFlashState] = useState<Record<string, FlashEntry | null>>({})
   const flashTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const requestIdRef = useRef(0)
 
   const maxMentions = Math.max(...tickers.map(t => t.mentions), 1)
 
-  async function fetchTickers() {
+  const fetchTickers = useCallback(async () => {
+    const requestId = ++requestIdRef.current
     setLoading(true)
     setError(null)
     try {
-      const data: TrendingTickerDto[] = await apiCall('/api/tickers/trending?limit=20')
-      const base = data.map(d => ({
+      const data: TrendingTickerDto[] = await apiCall(`/api/tickers/trending?limit=20&period=${activeTab}`)
+      if (requestIdRef.current !== requestId) return
+      setTickers(data.map(d => ({
         symbol: d.symbol,
-        change: null as number | null,
-        changePercent: null as number | null,
-        price: null as number | null,
+        price: d.price ?? null,
+        change: d.priceChange ?? null,
+        changePercent: d.changePercent ?? null,
         mentions: d.mentionCount,
         hypeScore: d.score,
-      }))
-      const prices = await Promise.all(base.map(t => fetchYahooPrice(t.symbol)))
-      setTickers(base.map((t, i) => ({ ...t, ...prices[i] })))
+      })))
     } catch {
-      setError('Could not load trending tickers.')
+      if (requestIdRef.current === requestId) setError('Could not load trending tickers.')
     } finally {
-      setLoading(false)
+      if (requestIdRef.current === requestId) setLoading(false)
     }
-  }
+  }, [apiCall, activeTab])
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return
     fetchTickers()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoaded, isSignedIn])
+  }, [isLoaded, isSignedIn, fetchTickers])
 
   useEffect(() => {
     const interval = setInterval(() => {

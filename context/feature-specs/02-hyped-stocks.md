@@ -6,22 +6,22 @@ Read `AGENTS.md` before starting.
 
 Build the main dashboard page at `/hyped-stocks`. This is where the user lands after successfully authenticating via Clerk. It displays the top 10–20 most hyped stocks with live price effects and essential ticker info. Clicking any ticker card navigates to `/hyped-stocks/{ticker}`.
 
-## Placeholder Data
+## Data Source
 
-The backend pipeline is not connected yet. Use hardcoded mock data for this implementation — an array of 15–20 ticker objects with the following shape:
+Fetch real ticker data from `GET /api/tickers/trending?limit=20` on mount using `useApiClient`. The response shape is:
 
 ```ts
-{
-  symbol: string        // e.g. "TSLA"
-  price: number         // e.g. 245.80
-  change: number        // e.g. +3.24 or -1.87
-  changePercent: number // e.g. +1.34 or -0.75
-  mentions: number      // e.g. 1482
-  hypeScore: number     // 0–100
+interface TrendingTickerDto {
+  symbol: string
+  score: number
+  mentionCount: number
+  price: number | null
+  priceChange: number | null
+  changePercent: number | null
 }
 ```
 
-Include a realistic spread — some tickers up, some down, varying mention counts.
+Map to the `TrendingTickerCard` props: `score` → `hypeScore`, `priceChange` → `change`, `mentionCount` → `mentions`, `price` → `price`. All numeric fields must be null-guarded — render `--` when null. Show a loading skeleton (3–4 cards) while fetching and an error state with a Retry button on failure.
 
 ## Design
 

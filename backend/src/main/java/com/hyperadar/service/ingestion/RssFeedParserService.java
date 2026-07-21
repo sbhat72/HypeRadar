@@ -1,5 +1,8 @@
 package com.hyperadar.service.ingestion;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -34,6 +37,9 @@ import java.util.Set;
 
 @Service
 public class RssFeedParserService {
+
+    private static final Logger log = LoggerFactory.getLogger(RssFeedParserService.class);
+
     @Value("${rss.feed.yahoofinance}")
     private String yahooFinanceFeedUrl;
 
@@ -49,8 +55,15 @@ public class RssFeedParserService {
     @Value("${alphavantage.api-key}")
     private String alphaApiKey;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
     private Set<String> validTickers = new HashSet<>();
+
+    public RssFeedParserService() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(10_000);
+        factory.setReadTimeout(10_000);
+        this.restTemplate = new RestTemplate(factory);
+    }
 
     @Autowired
     private TickerRepository tickerRepository;
@@ -87,14 +100,16 @@ public class RssFeedParserService {
         Matcher uppercaseMatcher = uppercasePattern.matcher(headline);
         while (uppercaseMatcher.find()) {
             String symbol = uppercaseMatcher.group();
-            if (validTickers.contains(symbol)) tickers.add(symbol);
+            if (!validTickers.isEmpty() && !validTickers.contains(symbol)) continue;
+            tickers.add(symbol);
         }
 
         Pattern cashtagPattern = Pattern.compile("\\$([A-Z]{1,5})");
         Matcher cashtagMatcher = cashtagPattern.matcher(headline);
         while (cashtagMatcher.find()) {
             String symbol = cashtagMatcher.group(1);
-            if (validTickers.contains(symbol)) tickers.add(symbol);
+            if (!validTickers.isEmpty() && !validTickers.contains(symbol)) continue;
+            tickers.add(symbol);
         }
 
         return tickers;
@@ -104,29 +119,42 @@ public class RssFeedParserService {
         private Set<String> negativeWords = new HashSet<>();
 
         @PostConstruct
-        public void loadSentimentDictionary() throws IOException {
-            InputStream is = getClass().getResourceAsStream("/Loughran-McDonald_MasterDictionary_1993-2025.csv");
-            BufferedReader reader = new BufferedReader(new InputStreamReader(is));
-            String line;
-            reader.readLine(); // skip header
-            while ((line = reader.readLine()) != null) {
-                String[] cols = line.split(",");
-                String word = cols[0];
-                int negative = Integer.parseInt(cols[7]);
-                int positive = Integer.parseInt(cols[8]);
-                if (negative != 0) negativeWords.add(word);
-                if (positive != 0) positiveWords.add(word);
+        public void loadSentimentDictionary() {
+            try {
+                InputStream is = getClass().getResourceAsStream("/Loughran-McDonald_MasterDictionary_1993-2025.csv");
+                if (is == null) {
+                    log.warn("Sentiment dictionary not found on classpath — scoring will return NEUTRAL for all headlines");
+                    return;
+                }
+                BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+                String line;
+                reader.readLine(); // skip header
+                while ((line = reader.readLine()) != null) {
+                    String[] cols = line.split(",");
+                    String word = cols[0];
+                    int negative = Integer.parseInt(cols[7]);
+                    int positive = Integer.parseInt(cols[8]);
+                    if (negative != 0) negativeWords.add(word);
+                    if (positive != 0) positiveWords.add(word);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to load sentiment dictionary — scoring will return NEUTRAL for all headlines: {}", e.getMessage());
             }
         }
 
         @PostConstruct
         public void loadValidTickers() {
-            String url = "https://www.alphavantage.co/query?function=LISTING_STATUS&apikey=" + alphaApiKey;
-            String csv = restTemplate.getForObject(url, String.class);
-            String[] rows = csv.split("\n");
-            for (int i = 1; i < rows.length; i++) {
-                String[] cols = rows[i].split(",");
-                if (cols.length > 0) validTickers.add(cols[0].trim());
+            try {
+                String url = "https://www.alphavantage.co/query?function=LISTING_STATUS&apikey=" + alphaApiKey;
+                String csv = restTemplate.getForObject(url, String.class);
+                String[] rows = csv.split("\n");
+                for (int i = 1; i < rows.length; i++) {
+                    String[] cols = rows[i].split(",");
+                    if (cols.length > 0) validTickers.add(cols[0].trim());
+                }
+                log.info("Loaded {} valid tickers from Alpha Vantage listing status", validTickers.size());
+            } catch (Exception e) {
+                log.warn("Could not load ticker universe from Alpha Vantage (rate limited or unreachable) — all discovered symbols will be accepted: {}", e.getMessage());
             }
         }
 
