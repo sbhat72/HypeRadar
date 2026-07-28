@@ -15,6 +15,7 @@ import {
   interpretVWAP,
 } from '@/lib/indicators'
 import { useApiClient } from '@/lib/useApiClient'
+import { type HypeBreakdownDto, VERDICT_MAP, scoreColor } from '@/lib/hype'
 
 const TIME_RANGES = [
   { label: '1D', interval: '5m',  range: '1d'  },
@@ -33,32 +34,10 @@ interface StockMeta {
   regularMarketVolume: number
 }
 
-interface HypeBreakdownDto {
-  symbol: string
-  currentScore: number
-  redditScore: number
-  newsScore: number
-  volumeScore: number
-  priceScore: number
-  verdict: string
-  currentPrice: number
-  priceChange: number
-  changePercent: number
-  scoreHistory: { timestamp: string; score: number }[]
-  sources: { source: string; content: string; polarity: string }[]
-}
-
 interface WatchlistItemDto {
   id: number
   tickerSymbol: string
   addedAt: string
-}
-
-const VERDICT_MAP: Record<string, { label: string; color: string }> = {
-  HYPE_CONFIRMED:       { label: 'Hype Confirmed',       color: '#62C073' },
-  PURE_HYPE:            { label: 'Pure Hype',            color: '#FF990A' },
-  HIDDEN_MOMENTUM:      { label: 'Hidden Momentum',      color: '#52A8FF' },
-  BEARISH_CONFIRMATION: { label: 'Bearish Confirmation', color: '#FF6166' },
 }
 
 const SOURCE_COLORS: Record<string, string> = {
@@ -67,12 +46,6 @@ const SOURCE_COLORS: Record<string, string> = {
   CNBC:        '#004B87',
   MARKETWATCH: '#0058A8',
   NASDAQ:      '#2775CA',
-}
-
-function scoreColor(score: number): string {
-  if (score > 60) return '#62C073'
-  if (score >= 40) return '#FF990A'
-  return '#FF6166'
 }
 
 function fmtUSD(n: number): string {
