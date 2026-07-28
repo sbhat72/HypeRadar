@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import TrendingTickerCard, { type TickerData, type FlashEntry } from '@/components/dashboard/TrendingTickerCard'
+import SearchResultCard, { type SearchResultData } from '@/components/dashboard/SearchResultCard'
 import { useApiClient } from '@/lib/useApiClient'
 
 interface TrendingTickerDto {
@@ -41,6 +42,14 @@ export default function HypedStocksPage() {
   const [flashState, setFlashState] = useState<Record<string, FlashEntry | null>>({})
   const flashTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
   const requestIdRef = useRef(0)
+
+  const [searchInput, setSearchInput] = useState('')
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [searchResult, setSearchResult] = useState<{
+    status: 'found' | 'not_found' | 'error'
+    ticker: string
+    data?: SearchResultData
+  } | null>(null)
 
   const maxMentions = Math.max(...tickers.map(t => t.mentions), 1)
 
@@ -115,6 +124,41 @@ export default function HypedStocksPage() {
     }
   }, [])
 
+  async function handleSearchSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    const ticker = searchInput.trim().toUpperCase()
+    if (!ticker) return
+
+    setSearchLoading(true)
+    try {
+      const data = await apiCall(`/api/hype/${ticker}`)
+      setSearchResult({
+        status: 'found',
+        ticker,
+        data: {
+          symbol: data?.symbol ?? ticker,
+          hypeScore: data?.currentScore ?? null,
+          verdict: data?.verdict ?? null,
+          price: data?.currentPrice ?? null,
+          changePercent: data?.changePercent ?? null,
+        },
+      })
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('404')) {
+        setSearchResult({ status: 'not_found', ticker })
+      } else {
+        setSearchResult({ status: 'error', ticker })
+      }
+    } finally {
+      setSearchLoading(false)
+    }
+  }
+
+  function handleSearchDismiss() {
+    setSearchResult(null)
+    setSearchInput('')
+  }
+
   return (
     <div className="min-h-screen bg-base">
       <div className="max-w-7xl mx-auto px-6 py-8">
@@ -154,6 +198,54 @@ export default function HypedStocksPage() {
             </button>
           ))}
         </div>
+
+        {/* Ticker Search */}
+        <div className="mb-8">
+          <form onSubmit={handleSearchSubmit} className="flex gap-3">
+            <input
+              type="text"
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value.toUpperCase())}
+              placeholder="Search ticker (e.g. TSLA)"
+              maxLength={10}
+              className="flex-1 px-4 py-3 rounded-xl font-mono text-sm outline-none transition-colors"
+              style={{
+                backgroundColor: 'var(--bg-elevated)',
+                border: '1px solid var(--border-default)',
+                color: 'var(--text-primary)',
+              }}
+            />
+            <button
+              type="submit"
+              disabled={searchLoading}
+              className="px-6 py-3 rounded-xl font-mono font-bold text-sm transition-all duration-150 disabled:opacity-60"
+              style={{
+                backgroundColor: 'var(--hype-green-bg)',
+                color: 'var(--hype-green)',
+                border: '1px solid var(--hype-green)',
+              }}
+            >
+              {searchLoading ? 'Searching…' : 'Search'}
+            </button>
+          </form>
+        </div>
+
+        {/* Search Results */}
+        {searchResult && (
+          <section className="mb-8">
+            <div className="pb-2 mb-4" style={{ borderBottom: '1px solid var(--border-default)' }}>
+              <span className="text-xs font-mono tracking-widest uppercase" style={{ color: 'var(--text-secondary)' }}>
+                Search Results
+              </span>
+            </div>
+            <SearchResultCard
+              status={searchResult.status}
+              ticker={searchResult.ticker}
+              data={searchResult.data}
+              onDismiss={handleSearchDismiss}
+            />
+          </section>
+        )}
 
         {/* Content */}
         {loading ? (
